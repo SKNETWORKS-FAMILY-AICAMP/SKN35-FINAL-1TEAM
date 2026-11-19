@@ -1,0 +1,17 @@
+# env
+.env
+
+# node / frontend
+node_modules/
+dist/
+
+# python
+.venv/
+__pycache__/
+
+# local
+.serena/
+.storage/
+.DS_Store
+
+claude.md
