@@ -107,9 +107,9 @@ flowchart TB
 
 | 영역 | 기술 |
 |---|---|
-| 백엔드 | Python 3.12, FastAPI, SQLAlchemy, Alembic, Pydantic, uv |
+| 백엔드 | Python 3.12, FastAPI, Pydantic, uv |
 | 비동기 작업 | Celery + Redis, Celery Beat |
-| 프론트엔드 | React, TypeScript, Vite, TanStack Query, Tailwind CSS, MSW |
+| 프론트엔드 | React, TypeScript, Vite, Tailwind CSS |
 | DB | PostgreSQL + pgvector |
 | 저장소 | AWS S3 |
 | 문서 추출 | Docling |
