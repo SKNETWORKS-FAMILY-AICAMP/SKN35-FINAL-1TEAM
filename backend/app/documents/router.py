@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.db.session import SessionDep
-from app.organizations import service
+from app.documents import service
 from app.organizations.schemas import CompanyRegisterRequest, CompanyRegisterResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
