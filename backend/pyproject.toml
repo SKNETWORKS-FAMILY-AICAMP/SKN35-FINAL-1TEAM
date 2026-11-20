@@ -1,0 +1,9 @@
+[project]
+name = "skn35-final-1team"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "docling>=2.150.1",
+]
