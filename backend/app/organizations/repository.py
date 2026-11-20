@@ -76,3 +76,10 @@ async def get_active_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return await db.scalar(
         select(User).where(User.user_id == user_id, User.is_deleted == YN.N)
     )
+
+
+# 초대 코드로 회사 조회
+async def get_company_by_invite_code(
+    db: AsyncSession, invite_code: str
+) -> Company | None:
+    return await db.scalar(select(Company).where(Company.invite_code == invite_code))

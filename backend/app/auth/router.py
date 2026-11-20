@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Response, status
 
 from app.auth import service
-from app.auth.schemas import LoginRequest, TokenResponse
+from app.auth.schemas import LoginRequest, SignupRequest, SignupResponse, TokenResponse
 from app.core.config import settings
 from app.db.session import SessionDep
 
@@ -26,6 +26,23 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         secure=settings.COOKIE_SECURE,
         samesite="lax",
         path=REFRESH_COOKIE_PATH,
+    )
+
+
+# 회원가입: 초대코드로 회사를 찾아 LIMITED 권한 직원 계정 생성
+@router.post(
+    "/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED
+)
+async def signup(body: SignupRequest, db: SessionDep):
+    user, company = await service.signup(
+        db, body.invite_code, body.email, body.password, body.name
+    )
+
+    return SignupResponse(
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
+        company_name=company.name,
     )
 
 
