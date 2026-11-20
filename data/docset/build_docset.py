@@ -4,8 +4,13 @@
 
   company.py       가상 SI사 인원 풀 (프로젝트 밖에서 관리 → B 프로젝트가 같은 사람 재사용)
   project_a.py     A 프로젝트(가나유통 온라인몰 차세대 구축) 데이터·변경 요청·정답
+  project_b.py     B 프로젝트(다온정밀 구매·발주 시스템/협력사 포털) — 7개 확장자, 대리 승인자, 다수 버전
   questions.py     사용자 질문 의도 평가셋 (프로젝트 열 포함)
   build_docset.py  렌더러 + 버전 엔진 + 정답 생성 + 교차 검증 (이 파일)
+
+파일 형식: 모델 종류(xlsx·docx·pptx·md)가 diff 단위를 정하고, 문서 정의의 fmt가 저장 형식을 정한다.
+  docx 블록 모델은 fmt="pdf"(텍스트 PDF, 비임베드 CID 폰트 + ToUnicode) · "hwpx"(OWPML zip) · "txt"로도 저장한다. 표준 라이브러리만 쓴다.
+승인자: 소유 팀 팀장. 팀장이 작성하면 같은 팀 대리 승인자(P.DEPUTY)가 승인하고, 팀장 부재 시 변경에 approver를 지정한다(본인 승인 금지).
 
 버전 엔진: 모든 문서를 v1으로 만든 뒤 CHANGES를 날짜순으로 적용한다.
   승인 → <프로젝트>/v{n}/ 에 그 문서의 새 HEAD 버전 생성
@@ -19,7 +24,10 @@
 import copy
 import re
 import shutil
+import zipfile
+import zlib
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -36,15 +44,17 @@ from pptx.util import Pt as PPt
 
 import company
 import project_a
+import project_b
 import questions
+import train_a
 
 ROOT = Path(__file__).parent
 DOC_DIR, Q_DIR, SCN_DIR = ROOT / "1_문서세트", ROOT / "2_질문셋", ROOT / "3_변경시나리오"  # DATA-01 / DATA-07 / DATA-03
 FONT = "맑은 고딕"
-PROJECTS = [project_a]
+PROJECTS = [project_a, project_b]
+TRAIN = {"A": train_a.SCENARIOS}  # 학습용 변경 시나리오(DATA-06 초안)
 EMP = {e[0]: e for e in company.EMPLOYEES}
 EXT = {x[0]: x for p in PROJECTS for x in p.EXTERNAL}
-KIND_EXT = {"xlsx": "xlsx", "docx": "docx", "pptx": "pptx", "md": "md"}
 
 
 def pname(pid):
@@ -63,13 +73,36 @@ def lead(P):
     return {t[0]: t[2] for t in teams(P)}
 
 
+def deputy(P):
+    return getattr(P, "DEPUTY", {})
+
+
+def approver_of(P, team, author, override=None):
+    """승인 담당: 지정(팀장 부재 등) > 작성자가 팀장이면 대리 승인자 > 팀장."""
+    if override:
+        return override
+    return deputy(P)[team] if author == lead(P)[team] else lead(P)[team]
+
+
+def apv_kind(P, team, author, apv):
+    if apv == lead(P)[team]:
+        return "팀장"
+    return "대리 승인(작성자=팀장)" if author == lead(P)[team] else "대리 승인(팀장 부재)"
+
+
+def in_team(P, pid, team):
+    t = next(x for x in teams(P) if x[0] == team)
+    return pid == t[2] or pid in t[3]
+
+
 def roster(P):
     """사번 → (팀 코드, 역할). 오너 > 팀장 > 멤버 > 게스트. 명단에 없는 사내 직원은 '프로젝트 밖'."""
     r = {}
+    dp = set(deputy(P).values())
     for code, _, ld, members, _ in teams(P):
         r[ld] = (code, "팀장")
         for m in members:
-            r[m] = (code, "멤버")
+            r[m] = (code, "멤버(대리 승인)" if m in dp else "멤버")
     r[P.OWNER] = ("PMO", "오너")
     for x in P.GUESTS:
         r[x] = ("-", "게스트")
@@ -103,8 +136,8 @@ def m_req(P, d, s):
         ("2. 기능 요구사항", "2. 기능 요구사항",
          ["요구사항 ID", "대분류", "요구사항명", "상세 설명", "사용자", "선행 조건", "처리 결과 / 수용 기준", "예외 처리", "우선순위", "관련 화면", "담당 개발팀", "출처", "상태"],
          [f[:10] + (tn[f[10]], f[11], "확정") for f in FR], (11, 10, 18, 60, 8, 16, 40, 40, 8, 16, 16, 22, 8), (0,)),
-        ("3. 권한 매트릭스", "3. 역할별 권한 매트릭스 (O 가능 · △ 조건부 · X 불가)", ["요구사항 ID", "기능", "비회원", "회원", "관리자", "조건·비고"],
-         [(p[0], next(f[2] for f in FR if f[0] == p[0]), *p[1:]) for p in d["PERM"]], (11, 22, 8, 8, 8, 34), (0,)),
+        ("3. 권한 매트릭스", "3. 역할별 권한 매트릭스 (O 가능 · △ 조건부 · X 불가)", ["요구사항 ID", "기능", *P.PERM_ROLES, "조건·비고"],
+         [(p[0], next(f[2] for f in FR if f[0] == p[0]), *p[1:]) for p in d["PERM"]], (11, 22, *[9] * len(P.PERM_ROLES), 34), (0,)),
         ("4. 비기능 요구사항", "4. 비기능 요구사항", ["요구사항 ID", "분류", "요구사항명", "상세 설명", "측정 지표", "목표 수치", "검증 방법", "우선순위", "관련 FR"],
          d["NFR"], (11, 9, 20, 50, 18, 14, 14, 8, 16), (0,)),
         ("5. 미결 사항", "5. 미결 사항 (정책 결정 필요)", ["No", "이슈", "선택지", "영향 받는 요구사항", "결정자", "결정 기한", "결정 내용", "상태"],
@@ -118,8 +151,7 @@ def m_req(P, d, s):
 def m_proc(P, d, s):
     tn = team_name(P)
     b = [("h1", "1. 개요"),
-         ("p", "본 문서는 구 쇼핑몰의 현행(As-Is) 업무와 차세대 시스템의 개선(To-Be) 업무 흐름을 정의한다. 각 단계는 요구사항(FR)과 인터페이스(IF)에 연결되며, "
-               "업무 규칙(BR)과 예외 흐름(EX)은 화면·인터페이스·테스트케이스 설계의 기준이 된다."),
+         ("p", P.PROC_INTRO),
          ("h1", "2. 프로세스 목록"),
          ("table", [["프로세스 ID", "프로세스명", "담당 개발팀", "관련 요구사항"]] +
           [[p[0], p[1], tn[p[2]], ", ".join(sorted({st[4] for st in p[4]}))] for p in d["PROC"]], True),
@@ -141,7 +173,7 @@ def m_ui(P, d, s):
     scr = {x[0]: x[1] for x in d["SCR"]}
     return "xlsx", [
         ("1. 공통 컴포넌트", "1. 공통 컴포넌트 규칙", ["컴포넌트 ID", "컴포넌트", "규칙·문구", "적용 화면"], d["UI_CMP"], (12, 16, 70, 34), (0,)),
-        ("2. 퍼블리싱 목록", "2. 화면별 퍼블리싱 목록 (2026-11-18 기준)", ["화면 ID", "화면명", "퍼블리싱 파일", "담당", "상태", "완료(예정)일"],
+        ("2. 퍼블리싱 목록", f"2. 화면별 퍼블리싱 목록 ({P.ASOF} 기준)", ["화면 ID", "화면명", "퍼블리싱 파일", "담당", "상태", "완료(예정)일"],
          [(u[0], scr[u[0]], u[1], pname(u[2]), u[3], u[4]) for u in d["UI_PUB"]], (10, 22, 26, 10, 8, 14), (0,)),
     ]
 
@@ -162,7 +194,7 @@ def if_detail(items):
 def m_if(P, d, s):
     items = [i for i in d["IF"] if i[13] == s["team"]]
     b = [("h1", "1. 개요"), ("p", P.IF_INTRO[s["team"]])]
-    if s["team"] == "CT":
+    if s.get("eif"):
         b += [("h1", "2. 연계 대상 시스템"), ("table", [["대상 시스템", "소유·위치", "연계 방식", "관련 IF"]] + [list(x) for x in d["EIF_SYSTEMS"]], True),
               ("h1", "3. 연계 공통 사항"), ("table", [["항목", "내용"]] + [list(x) for x in d["EIF_COMMON"]], True)]
     n = len([x for x in b if x[0] == "h1"])
@@ -180,7 +212,7 @@ def m_tb(P, d, s):
     tn = team_name(P)
     used_by = {t[0]: [i[0] for i in d["IF"] if t[0] in i[9]] for t in d["TB"]}
     return "xlsx", [
-        ("1. 테이블 목록", "1. 테이블 목록 (DBMS: MySQL 8.0, 스키마: vsm)", ["No", "테이블명", "테이블 한글명", "설명", "담당 업무팀", "관련 인터페이스"],
+        ("1. 테이블 목록", f"1. 테이블 목록 ({P.DB_DESC})", ["No", "테이블명", "테이블 한글명", "설명", "담당 업무팀", "관련 인터페이스"],
          [(n, t[0], t[1], t[2], tn[t[4]], ", ".join(used_by[t[0]])) for n, t in enumerate(d["TB"], 1)], (5, 22, 14, 40, 18, 50), (1,)),
         ("2. 컬럼 정의", "2. 컬럼 정의", ["테이블명", "테이블 한글명", "No", "컬럼명", "컬럼 한글명", "데이터 타입", "NULL", "키", "기본값", "설명"],
          [(t[0], t[1], n, *c) for t in d["TB"] for n, c in enumerate(t[3], 1)], (22, 12, 5, 18, 18, 14, 6, 7, 12, 44), (0, 3)),
@@ -213,7 +245,7 @@ def m_tc(P, d, s):
         summ.setdefault(t[1], {}).setdefault(t[8], 0)
         summ[t[1]][t[8]] += 1
     return "xlsx", [
-        ("1. 테스트케이스", "1. 테스트케이스 및 수행 결과 (2026-11-18 기준)",
+        ("1. 테스트케이스", f"1. 테스트케이스 및 수행 결과 ({P.ASOF} 기준)",
          ["TC ID", "단계", "관련 요구사항", "관련 화면·IF", "시나리오", "입력·조건", "기대 결과", "담당", "수행 결과", "수행일", "결함 ID"],
          [t[:7] + (pname(t[7]),) + t[8:] for t in d["TC"]], (8, 6, 12, 18, 22, 36, 40, 8, 9, 12, 9), (0,)),
         ("2. 결함 목록", "2. 결함 목록", ["결함 ID", "TC", "발견일", "심각도", "내용", "원인 구분", "조치 팀", "조치 상태"],
@@ -225,7 +257,7 @@ def m_tc(P, d, s):
 
 def m_wbs(P, d, s):
     return "xlsx", [
-        ("1. WBS", "1. WBS (2026-11-18 기준)", ["WBS ID", "단계", "작업", "담당 팀", "산출물", "시작", "종료", "진척률", "상태"], d["WBS"],
+        ("1. WBS", f"1. WBS ({P.ASOF} 기준)", ["WBS ID", "단계", "작업", "담당 팀", "산출물", "시작", "종료", "진척률", "상태"], d["WBS"],
          (7, 8, 40, 26, 40, 12, 12, 8, 8), (0,)),
         ("2. 검수 마일스톤", "2. 검수 마일스톤", ["ID", "마일스톤", "예정일", "검수자", "검수 대상 산출물", "상태"], d["MILESTONES"], (5, 16, 12, 30, 70, 20), (0,)),
     ]
@@ -379,7 +411,290 @@ def render_md(path, meta, body):
     path.write_text(head + hist + "\n" + body, encoding="utf-8")
 
 
-RENDER = {"xlsx": render_xlsx, "docx": render_docx, "pptx": render_pptx, "md": render_md}
+def full_blocks(meta, blocks):
+    """docx 외 형식(pdf·hwpx·txt)용: 표지·개정 이력을 블록 앞에 붙인다."""
+    return ([("title", f"{meta['project']}\n{meta['name']}"), ("table", [["항목", "내용"]] + [list(x) for x in cover_rows(meta)], True),
+             ("h1", "개정 이력"), ("table", [HIST_HEAD] + [list(h) for h in meta["history"]], True)] + list(blocks))
+
+
+def render_txt(path, meta, blocks):
+    L = []
+    for b in full_blocks(meta, blocks):
+        if b[0] == "title":
+            L += [b[1].replace("\n", " — "), "=" * 60]
+        elif b[0] in ("h1", "h2"):
+            L += ["", b[1], ("=" if b[0] == "h1" else "-") * 40]
+        elif b[0] == "p":
+            L.append(b[1])
+        else:
+            L += [" | ".join(str(v) for v in r) for r in b[1]] + [""]
+    path.write_text("\n".join(L) + "\n", encoding="utf-8")
+
+
+# PDF: 한글 폰트를 임베드하지 않고 Adobe-Korea1 CID 폰트(HYGoThic-Medium)를 참조한다 → OS별 폰트 경로 불필요, 파일 작음.
+# 문자 코드 = UCS-2이고 ToUnicode CMap을 넣어 텍스트 추출(pypdf·pdfminer)이 정확하다. ASCII 폭 500, 그 외 1000.
+PDF_W, PDF_H, PDF_M = 595.28, 841.89, 48
+PDF_FIX = str.maketrans({"−": "-", "—": "-", "‐": "-", "–": "-"})
+
+
+def _pdf_s(s):
+    return "".join(c if ord(c) < 0xD800 or 0xE000 <= ord(c) < 0x10000 else "?" for c in str(s).translate(PDF_FIX))
+
+
+def _pw(s, size):
+    return sum(0.5 if ord(c) < 128 else 1.0 for c in s) * size
+
+
+def _wrap(s, size, width):
+    out = []
+    for para in _pdf_s(s).split("\n"):
+        line = ""
+        for ch in para:
+            if line and _pw(line + ch, size) > width:
+                out.append(line)
+                line = ""
+            line += ch
+        out.append(line)
+    return out
+
+
+def render_pdf(path, meta, blocks):
+    pages, ops = [], []
+    y = PDF_H - PDF_M
+
+    def text(x, yy, s, size):
+        ops.append(f"BT /F1 {size} Tf {x:.1f} {yy:.1f} Td <{_pdf_s(s).encode('utf-16-be').hex()}> Tj ET")
+
+    def need(h):
+        nonlocal ops, y
+        if y - h < PDF_M + 16:
+            pages.append(ops)
+            ops, y = [], PDF_H - PDF_M
+
+    def para(s, size, before=0, after=4):
+        nonlocal y
+        y -= before
+        for line in _wrap(s, size, PDF_W - 2 * PDF_M):
+            need(size * 1.5)
+            y -= size * 1.5
+            text(PDF_M, y + size * 0.3, line, size)
+        y -= after
+
+    def table(rows, head, size=8):
+        nonlocal y
+        n = max(len(r) for r in rows)
+        rows = [[str(v) for v in r] + [""] * (n - len(r)) for r in rows]
+        want = [min(max(_pw(r[j], size) for r in rows), 200) + 10 for j in range(n)]
+        cw = [w * (PDF_W - 2 * PDF_M) / sum(want) for w in want]
+        pad, lead = 3, size * 1.35
+        for i, r in enumerate(rows):
+            cells = [_wrap(v, size, cw[j] - 2 * pad) for j, v in enumerate(r)]
+            h = max(len(c) for c in cells) * lead + 2 * pad
+            need(h)
+            x = PDF_M
+            for j, c in enumerate(cells):
+                if head and i == 0:
+                    ops.append(f"0.86 0.9 0.95 rg {x:.1f} {y - h:.1f} {cw[j]:.1f} {h:.1f} re f 0 g")
+                ops.append(f"0.5 w {x:.1f} {y - h:.1f} {cw[j]:.1f} {h:.1f} re S")
+                for k, line in enumerate(c):
+                    text(x + pad, y - pad - (k + 1) * lead + size * 0.35, line, size)
+                x += cw[j]
+            y -= h
+        y -= 8
+
+    for b in full_blocks(meta, blocks):
+        if b[0] == "title":
+            para(b[1], 17, 40, 24)
+        elif b[0] == "h1":
+            para(b[1], 13, 10, 4)
+        elif b[0] == "h2":
+            para(b[1], 11, 6, 3)
+        elif b[0] == "p":
+            para(b[1], 9.5)
+        else:
+            table(b[1], b[2])
+    pages.append(ops)
+
+    objs = [None, None]
+
+    def add(body, stream=None):
+        if stream is not None:
+            body = body + f" /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+        objs.append(body if isinstance(body, bytes) else body.encode())
+        return len(objs)
+
+    cmap = ("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+            "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n")
+    hi = [h for h in range(256) if not 0xD8 <= h <= 0xDF]
+    for i in range(0, len(hi), 100):
+        part = hi[i:i + 100]
+        cmap += f"{len(part)} beginbfrange\n" + "".join(f"<{h:02X}00> <{h:02X}FF> <{h:02X}00>\n" for h in part) + "endbfrange\n"
+    cmap += "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n"
+    tu = add(b"<<", cmap.encode())
+    fd = add("<< /Type /FontDescriptor /FontName /HYGoThic-Medium /Flags 4 /FontBBox [-6 -145 1003 880] /ItalicAngle 0 "
+             "/Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>")
+    cid = add(f"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /HYGoThic-Medium /CIDSystemInfo << /Registry (Adobe) /Ordering (Korea1) "
+              f"/Supplement 1 >> /FontDescriptor {fd} 0 R /DW 1000 /W [1 95 500] >>")
+    f1 = add(f"<< /Type /Font /Subtype /Type0 /BaseFont /HYGoThic-Medium-UniKS-UCS2-H /Encoding /UniKS-UCS2-H "
+             f"/DescendantFonts [{cid} 0 R] /ToUnicode {tu} 0 R >>")
+    kids = []
+    for n, pg in enumerate(pages, 1):
+        foot = f"BT /F1 7.5 Tf {PDF_M} 24 Td <{_pdf_s(meta['name'] + ' ' + meta['version'] + f'  —  {n} / {len(pages)}').encode('utf-16-be').hex()}> Tj ET"
+        c = add(b"<< /Filter /FlateDecode", zlib.compress("\n".join(pg + [foot]).encode("latin-1")))
+        kids.append(add(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PDF_W} {PDF_H}] /Resources << /Font << /F1 {f1} 0 R >> >> /Contents {c} 0 R >>"))
+    objs[0] = b"<< /Type /Catalog /Pages 2 0 R >>"
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] /Count {len(kids)} >>".encode()
+    info = add(f"<< /Title <FEFF{_pdf_s(meta['name']).encode('utf-16-be').hex()}> /Producer (build_docset.py) >>")
+    out, offs = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"), []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n".encode() + o + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + "".join(f"{o:010d} 00000 n \n" for o in offs).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R /Info {info} 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    path.write_bytes(bytes(out))
+
+
+# HWPX: 한컴 OWPML(KS X 6101) zip. 표준 라이브러리(zipfile)로 최소 구성(header·section0·content.hpf)을 쓴다.
+HWPX_BODY_W = 48190  # A4 폭 59528 − 좌우 여백 5669×2 (HWPUNIT)
+_HNS = ('xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" '
+        'xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" '
+        'xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head"')
+
+
+def _hwpx_header():
+    langs = ("HANGUL", "LATIN", "HANJA", "JAPANESE", "OTHER", "SYMBOL", "USER")
+    faces = "".join(f'<hh:fontface lang="{l}" fontCnt="1"><hh:font id="0" face="{FONT}" type="TTF" isEmbedded="0"/></hh:fontface>' for l in langs)
+    per = lambda tag, v: f'<hh:{tag} ' + " ".join(f'{l.lower()}="{v}"' for l in langs) + "/>"
+
+    def border(i, line, fill=""):
+        sides = "".join(f'<hh:{s}Border type="{line}" width="0.12 mm" color="#000000"/>' for s in ("left", "right", "top", "bottom"))
+        return (f'<hh:borderFill id="{i}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">'
+                '<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>'
+                f'{sides}<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>{fill}</hh:borderFill>')
+
+    def char(i, size, bold):
+        return (f'<hh:charPr id="{i}" height="{size * 100}" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" '
+                'symMark="NONE" borderFillIDRef="1">' + per("fontRef", 0) + per("ratio", 100) + per("spacing", 0) + per("relSz", 100) +
+                per("offset", 0) + ("<hh:bold/>" if bold else "") + '<hh:underline type="NONE" shape="SOLID" color="#000000"/>'
+                '<hh:strikeout shape="NONE" color="#000000"/><hh:outline type="NONE"/><hh:shadow type="NONE" color="#B2B2B2" offsetX="10" offsetY="10"/></hh:charPr>')
+
+    def parap(i, align, spacing):
+        return (f'<hh:paraPr id="{i}" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">'
+                f'<hh:align horizontal="{align}" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/>'
+                '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" widowOrphan="0" keepWithNext="0" keepLines="0" '
+                'pageBreakBefore="0" lineWrap="BREAK"/><hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
+                '<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/>'
+                '<hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin>'
+                f'<hh:lineSpacing type="PERCENT" value="{spacing}" unit="HWPUNIT"/>'
+                '<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/></hh:paraPr>')
+
+    head_fill = '<hc:fillBrush><hc:winBrush faceColor="#DCE6F1" hatchColor="#999999" alpha="0"/></hc:fillBrush>'
+    chars = [char(0, 10, False), char(1, 16, True), char(2, 13, True), char(3, 11, True), char(4, 9, False), char(5, 9, True)]
+    return ('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+            f'<hh:head {_HNS} version="1.4" secCnt="1"><hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/><hh:refList>'
+            f'<hh:fontfaces itemCnt="7">{faces}</hh:fontfaces>'
+            f'<hh:borderFills itemCnt="3">{border(1, "NONE")}{border(2, "SOLID")}{border(3, "SOLID", head_fill)}</hh:borderFills>'
+            f'<hh:charProperties itemCnt="{len(chars)}">{"".join(chars)}</hh:charProperties>'
+            '<hh:tabProperties itemCnt="1"><hh:tabPr id="0" autoTabLeft="0" autoTabRight="0"/></hh:tabProperties>'
+            f'<hh:paraProperties itemCnt="3">{parap(0, "JUSTIFY", 160)}{parap(1, "CENTER", 160)}{parap(2, "LEFT", 130)}</hh:paraProperties>'
+            '<hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" '
+            'nextStyleIDRef="0" langID="1042" lockForm="0"/></hh:styles></hh:refList>'
+            '<hh:compatibleDocument targetProgram="HWP201X"><hh:layoutCompatibility/></hh:compatibleDocument></hh:head>')
+
+
+def render_hwpx(path, meta, blocks):
+    seq = iter(range(1, 10 ** 7))
+    plain = []
+
+    def p(text, cp=0, pp=0, inner=None):
+        if inner is None:
+            plain.append(text)
+        run = inner if inner is not None else f"<hp:t>{escape(text)}</hp:t>"
+        return (f'<hp:p id="{next(seq)}" paraPrIDRef="{pp}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="{cp}">{run}</hp:run></hp:p>')
+
+    def table(rows, head):
+        n = max(len(r) for r in rows)
+        rows = [[str(v) for v in r] + [""] * (n - len(r)) for r in rows]
+        want = [max(min(max(len(r[j]) for r in rows), 40), 3) for j in range(n)]
+        cw = [HWPX_BODY_W * w // sum(want) for w in want]
+        cw[-1] += HWPX_BODY_W - sum(cw)
+        trs = ""
+        for i, r in enumerate(rows):
+            hd = head and i == 0
+            tcs = ""
+            for j, v in enumerate(r):
+                body = "".join(p(line, 5 if hd else 4, 2) for line in v.split("\n"))
+                tcs += (f'<hp:tc name="" header="{int(hd)}" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="{3 if hd else 2}">'
+                        '<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" '
+                        f'textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">{body}</hp:subList>'
+                        f'<hp:cellAddr colAddr="{j}" rowAddr="{i}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                        f'<hp:cellSz width="{cw[j]}" height="1200"/><hp:cellMargin left="283" right="283" top="141" bottom="141"/></hp:tc>')
+            trs += f"<hp:tr>{tcs}</hp:tr>"
+        tbl = (f'<hp:tbl id="{next(seq)}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" '
+               f'dropcapstyle="None" pageBreak="CELL" repeatHeader="{int(head)}" rowCnt="{len(rows)}" colCnt="{n}" cellSpacing="0" '
+               f'borderFillIDRef="2" noAdjust="0"><hp:sz width="{HWPX_BODY_W}" widthRelTo="ABSOLUTE" height="{1200 * len(rows)}" '
+               'heightRelTo="ABSOLUTE" protect="0"/><hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" '
+               'holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+               '<hp:outMargin left="0" right="0" top="0" bottom="283"/><hp:inMargin left="283" right="283" top="141" bottom="141"/>'
+               f"{trs}</hp:tbl>")
+        return p("", inner=tbl + "<hp:t/>")
+
+    sec_pr = ('<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" tabStopVal="4000" tabStopUnit="HWPUNIT" '
+              'outlineShapeIDRef="0" memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">'
+              '<hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/><hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>'
+              '<hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" '
+              'hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/><hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>'
+              '<hp:pagePr landscape="WIDELY" width="59528" height="84186" gutterType="LEFT_ONLY">'
+              '<hp:margin header="4252" footer="4252" gutter="0" left="5669" right="5669" top="5669" bottom="4252"/></hp:pagePr>'
+              '<hp:pageBorderFill type="BOTH" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER">'
+              '<hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill></hp:secPr>'
+              '<hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl>')
+    paras = [p("", inner=sec_pr)]
+    for b in full_blocks(meta, blocks):
+        if b[0] == "title":
+            paras += [p(line, 1, 1) for line in b[1].split("\n")]
+        elif b[0] in ("h1", "h2"):
+            paras.append(p(b[1], 2 if b[0] == "h1" else 3))
+        elif b[0] == "p":
+            paras.append(p(b[1]))
+        else:
+            plain.extend(" | ".join(str(v) for v in r) for r in b[1])
+            paras.append(table(b[1], b[2]))
+    section = ('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+               f'<hs:sec {_HNS}>' + "".join(paras) + "</hs:sec>")
+    hpf = ('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+           f'<opf:package {_HNS} xmlns:opf="http://www.idpf.org/2007/opf/" version="" unique-identifier="" id="">'
+           f'<opf:metadata><opf:title>{escape(meta["name"])}</opf:title><opf:language>ko</opf:language></opf:metadata>'
+           '<opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>'
+           '<opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/>'
+           '<opf:item id="settings" href="settings.xml" media-type="application/xml"/></opf:manifest>'
+           '<opf:spine><opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/></opf:spine></opf:package>')
+    files = {
+        "version.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><hv:HCFVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" '
+                       'tagetApplication="WORDPROCESSOR" major="5" minor="1" micro="0" buildNumber="1" os="1" xmlVersion="1.4" '
+                       'application="Hancom Office Hangul" appVersion="11, 0, 0, 0"/>',
+        "META-INF/container.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><ocf:container xmlns:ocf="urn:oasis:names:tc:opendocument:xmlns:container" '
+                                  'xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf"><ocf:rootfiles>'
+                                  '<ocf:rootfile full-path="Contents/content.hpf" media-type="application/hwpml-package+xml"/>'
+                                  '<ocf:rootfile full-path="Preview/PrvText.txt" media-type="text/plain"/></ocf:rootfiles></ocf:container>',
+        "META-INF/manifest.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><odf:manifest xmlns:odf="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"/>',
+        "Contents/content.hpf": hpf,
+        "Contents/header.xml": _hwpx_header(),
+        "Contents/section0.xml": section,
+        "settings.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><ha:HWPApplicationSetting xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" '
+                        'xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"><ha:CaretPosition listIDRef="0" paraIDRef="0" pos="0"/></ha:HWPApplicationSetting>',
+        "Preview/PrvText.txt": "\r\n".join(plain)[:1024],
+    }
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/hwp+zip", compress_type=zipfile.ZIP_STORED)
+        for name, data in files.items():
+            z.writestr(name, data.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
+
+
+RENDER = {"xlsx": render_xlsx, "docx": render_docx, "pptx": render_pptx, "md": render_md,
+          "pdf": render_pdf, "hwpx": render_hwpx, "txt": render_txt}
 
 # ─────────────────────────── 비교·검출 ───────────────────────────
 
@@ -426,7 +741,7 @@ def cells(kind, body):
     else:
         for line in body.splitlines():
             if line.strip():
-                out[("본문", line, "")] = ""
+                out[("본문", line, "줄")] = line  # 값이 있어야 줄 추가·삭제가 diff에 잡힌다
     return out
 
 
@@ -477,39 +792,49 @@ def apply_ops(d, ops):
         return x, 0
 
     for op in ops:
-        if op[0] == "rep":
+        if op[0] == "rep":  # iid None = 그 데이터 전체(블록 문서 등)에서 치환
             _, key, iid, old, new = op
-            i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
-            d[key][i], cnt = rep(d[key][i], old, new)
+            if iid is None:
+                d[key], cnt = rep(d[key], old, new)
+            else:
+                i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+                d[key][i], cnt = rep(d[key][i], old, new)
             assert cnt, f"치환 대상 없음: {iid} '{old}'"
+        elif op[0] == "set":  # ("set", 데이터, 항목 ID, 열 인덱스, 값)
+            _, key, iid, col, val = op
+            i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+            d[key][i] = d[key][i][:col] + (val,) + d[key][i][col + 1:]
+        elif op[0] == "add":  # ("add", 데이터, 행)
+            d[op[1]].append(op[2])
         else:
             next(t for t in d["TB"] if t[0] == op[1])[3].append(op[2])
 
 
 def fname(s, kind):
-    return f"{s['no']:02d}_{s['name']}.{KIND_EXT[kind]}"
+    return f"{s['no']:02d}_{s['name']}.{s.get('fmt', kind)}"
 
 
-def meta_of(P, s, version, state, history):
+def meta_of(P, s, version, state, history, apv):
     return dict(name=s["name"], project=P.PROJECT, client=P.CLIENT, team=team_name(P)[s["team"]], version=version, state=state,
                 grade=s["grade"], date=s["date"], author=pname(s["author"]), reviewer=pname(s["reviewer"]),
-                approver=pname(lead(P)[s["team"]]), history=history)
+                approver=pname(apv), history=history)
 
 
 def build_project(P):
     out = DOC_DIR / P.FOLDER
-    if out.exists():
-        shutil.rmtree(out)
+    out.mkdir(parents=True, exist_ok=True)
+    for p in out.iterdir():  # 폴더 자체는 남긴다(탐색기·터미널이 열고 있으면 Windows에서 삭제 실패)
+        shutil.rmtree(p) if p.is_dir() else p.unlink()
     d = {k: copy.deepcopy(getattr(P, k)) for k in P.DATA_KEYS}
-    ld = lead(P)
     heads, hist = {}, {}
     for k, s in P.DOCS.items():
         kind, body = MODELS[s["model"]](P, d, s)
-        hist[k] = [("v1", s["date"], "최초 작성", pname(s["author"]), pname(ld[s["team"]]))]
+        apv = approver_of(P, s["team"], s["author"])
+        hist[k] = [("v1", s["date"], "최초 작성", pname(s["author"]), pname(apv))]
         path = out / "v1" / fname(s, kind)
         path.parent.mkdir(parents=True, exist_ok=True)
-        RENDER[kind](path, meta_of(P, s, "v1", "HEAD 승인본", hist[k]), body)
-        heads[k] = (1, kind, body, path, s["date"])
+        RENDER[s.get("fmt", kind)](path, meta_of(P, s, "v1", "HEAD 승인본", hist[k], apv), body)
+        heads[k] = (1, kind, body, path, s["date"], apv)
     log, diffs = [], []
     for c in P.CHANGES:
         k, s = c["doc"], P.DOCS[c["doc"]]
@@ -519,7 +844,8 @@ def build_project(P):
         ver = heads[k][0] + 1
         dl = diff(kind, heads[k][2], body)
         assert dl, f"{c['id']} 변경 내용 없음"
-        h = (f"v{ver}", c["done"] or c["req"], c["summary"], pname(c["author"]), pname(ld[s["team"]]))
+        apv = approver_of(P, s["team"], c["author"], c.get("approver"))
+        h = (f"v{ver}", c["done"] or c["req"], c["summary"], pname(c["author"]), pname(apv))
         if c["status"] == "승인":
             d = nd
             hist[k] = hist[k] + [h]
@@ -529,10 +855,10 @@ def build_project(P):
             path = out / c["status"].replace(" ", "") / f"{c['id']}_{fname(s, kind)}"
             state = f"제출본({c['status']})"
         path.parent.mkdir(parents=True, exist_ok=True)
-        RENDER[kind](path, meta_of(P, s, f"v{ver}", state, hist[k] + ([] if c["status"] == "승인" else [h])), body)
+        RENDER[s.get("fmt", kind)](path, meta_of(P, s, f"v{ver}", state, hist[k] + ([] if c["status"] == "승인" else [h]), apv), body)
         if c["status"] == "승인":
-            heads[k] = (ver, kind, body, path, c["done"])
-        log.append((c, heads[k][0] if c["status"] != "승인" else ver - 1, ver, path))
+            heads[k] = (ver, kind, body, path, c["done"], apv)
+        log.append((c, heads[k][0] if c["status"] != "승인" else ver - 1, ver, path, apv))
         diffs += [(c["id"], s["name"], *x) for x in dl]
     found_head = scan(P, heads)
     write_truth(P, out, heads, log, diffs, found_head)
@@ -544,19 +870,21 @@ def build_project(P):
 
 
 def write_truth(P, out, heads, log, diffs, found_head):
-    tn, ld = team_name(P), lead(P)
+    tn = team_name(P)
     wb = Workbook()
     wb.remove(wb.active)
     rel = lambda p: p.relative_to(out).as_posix()
-    xl_sheet(wb, "HEAD 현황", f"{P.PROJECT} — 문서별 HEAD (2026-11-18 기준)",
-             ["문서 키", "문서", "소유 팀", "공개 범위", "HEAD 버전", "HEAD 반영일", "파일"],
-             [(k, s["name"], tn[s["team"]], s["grade"], f"v{heads[k][0]}", heads[k][4], rel(heads[k][3])) for k, s in P.DOCS.items()],
-             (8, 26, 20, 12, 9, 12, 50))
-    xl_sheet(wb, "변경 요청", "변경 요청 이력 (승인 건만 HEAD 반영)",
-             ["변경 ID", "문서", "기준 버전", "요청 버전", "상태", "작성자", "승인 담당", "요청일", "처리일", "변경 사유", "변경 요약", "반려 사유", "파일"],
+    xl_sheet(wb, "HEAD 현황", f"{P.PROJECT} — 문서별 HEAD ({P.ASOF} 기준)",
+             ["문서 키", "문서", "소유 팀", "공개 범위", "형식", "HEAD 버전", "HEAD 반영일", "HEAD 승인자", "파일"],
+             [(k, s["name"], tn[s["team"]], s["grade"], heads[k][3].suffix[1:], f"v{heads[k][0]}", heads[k][4],
+               f"{pname(heads[k][5])}({heads[k][5]})", rel(heads[k][3])) for k, s in P.DOCS.items()],
+             (8, 26, 20, 12, 6, 9, 12, 14, 50))
+    xl_sheet(wb, "변경 요청", "변경 요청 이력 (승인 건만 HEAD 반영, 본인 승인 금지)",
+             ["변경 ID", "문서", "기준 버전", "요청 버전", "상태", "작성자", "승인 담당", "승인 구분", "요청일", "처리일", "변경 사유", "변경 요약", "반려 사유", "파일"],
              [(c["id"], P.DOCS[c["doc"]]["name"], f"v{bv}", f"v{nv}", c["status"], f"{pname(c['author'])}({c['author']})",
-               f"{pname(ld[P.DOCS[c['doc']]['team']])}({ld[P.DOCS[c['doc']]['team']]})", c["req"], c["done"], c["reason"], c["summary"],
-               c.get("reject", ""), rel(p)) for c, bv, nv, p in log], (9, 22, 8, 8, 9, 14, 14, 11, 11, 36, 44, 36, 50))
+               f"{pname(apv)}({apv})", apv_kind(P, P.DOCS[c["doc"]]["team"], c["author"], apv) + (f" — {c['apv_note']}" if c.get("apv_note") else ""),
+               c["req"], c["done"], c["reason"], c["summary"], c.get("reject", ""), rel(p)) for c, bv, nv, p, apv in log],
+             (9, 22, 8, 8, 9, 14, 14, 26, 11, 11, 36, 44, 36, 50))
     wb.save(out / "문서이력.xlsx")
 
     wb = Workbook()
@@ -564,8 +892,8 @@ def write_truth(P, out, heads, log, diffs, found_head):
     ws.title = "안내"
     for r in [["변경 예시와 영향 라벨 — LLM 작성 예시, 테스트셋 아님"], [],
               ["DATA-03 테스트셋은 사람이 직접 만든 시나리오만 쓰고, 라벨은 시나리오 작성자가 아닌 2명이 따로 붙인다(DATA-04)."],
-              ["이 파일의 변경 10건과 영향 라벨은 LLM이 만든 것이라 라벨 가이드(DATA-02) 경계 사례 예시나 학습용(DATA-06, 사람 검수 후)으로만 쓴다."],
-              ["변경 10건은 1_문서세트의 v2·v3·승인대기·반려 파일과 문서이력.xlsx에 대응한다."], [],
+              [f"이 파일의 변경 {len(log)}건과 영향 라벨은 LLM이 만든 것이라 라벨 가이드(DATA-02) 경계 사례 예시나 학습용(DATA-06, 사람 검수 후)으로만 쓴다."],
+              [f"변경 {len(log)}건은 1_문서세트/{P.FOLDER}의 v2 이상·승인대기·반려 파일과 문서이력.xlsx에 대응한다."], [],
               ["시트", "내용"], ["변경 상세(diff)", "변경마다 기준 버전 대비 바뀐 칸(이전 값 → 이후 값)"],
               ["영향 팀 라벨", "변경마다 팀별 영향 있음 / 영향 없음(소유 팀은 판정 없이 항상 알림)"],
               ["반복값 위치(HEAD)", "같은 값이 나오는 문서·위치 — 새 변경 시나리오를 만들 때 영향 범위 근거"]]:
@@ -585,10 +913,13 @@ def write_truth(P, out, heads, log, diffs, found_head):
                 j = f"소유 팀({j})" if j else "소유 팀"
             elif c["status"] != "승인":
                 j, why = "영향 없음", f"{c['status']} — HEAD 미반영, 알림 대상 아님"
+            elif P.DOCS[c["doc"]]["grade"] == "팀 내부":
+                j, why = "영향 없음", "팀 내부 문서 — 알림은 소유 팀 안에서만, 다른 팀 판정 대상 아님"
             else:
                 j, why = given.get(code, ("영향 없음", ""))
             notify = ("알림 없음(HEAD 미반영)" if c["status"] != "승인" else
-                      "항상 알림(규칙, LLM 판정 대상 아님)" if code == owner else "LLM 판정 결과에 따름")
+                      "항상 알림(규칙, LLM 판정 대상 아님)" if code == owner else
+                      "알림 없음(팀 내부 문서)" if P.DOCS[c["doc"]]["grade"] == "팀 내부" else "LLM 판정 결과에 따름")
             rows.append((c["id"], c["status"], name, j, notify, why))
     xl_sheet(wb, "영향 팀 라벨", "변경별 팀 영향 라벨 — LLM 작성 예시, 테스트셋 아님 (영향 있음 / 영향 없음 — 소유 팀은 항상 알림)", ["변경 ID", "상태", "팀", "판정", "알림", "근거"], rows, (9, 9, 20, 16, 28, 70))
     xl_sheet(wb, "반복값 위치(HEAD)", "현재 HEAD에서 반복값이 나오는 위치 — 변경 시나리오 후보",
@@ -599,46 +930,115 @@ def write_truth(P, out, heads, log, diffs, found_head):
     wb.save(SCN_DIR / f"{P.FOLDER}_변경예시_영향라벨.xlsx")
 
 
+def head_data(P):
+    d = {k: copy.deepcopy(getattr(P, k)) for k in P.DATA_KEYS}
+    for c in P.CHANGES:
+        if c["status"] == "승인":
+            apply_ops(d, c["ops"])
+    return d
+
+
+def train_rows(P):
+    """학습용 시나리오 → (시나리오 행, 라벨 행). 소유 팀은 판정 대상이 아니라 쌍에서 뺀다."""
+    tn = team_name(P)
+    scn, lab = [], []
+    for n, (doc, kind, _key, loc, before, after, why, labels) in enumerate(TRAIN[P.CODE], 1):
+        sid, owner = f"TR-{P.CODE}-{n:03d}", P.DOCS[doc]["team"]
+        given = {t: (f"영향 {j}", r) for t, j, r in labels}
+        hit = 0
+        for code, name, *_ in teams(P):
+            if code == owner:
+                continue
+            j, r = given.get(code, ("영향 없음", ""))
+            hit += j == "영향 있음"
+            lab.append((sid, P.DOCS[doc]["name"], tn[owner], name, j, "Y" if r.startswith("경계") else "", r, "", ""))
+        scn.append((sid, P.DOCS[doc]["name"], tn[owner], kind, loc, before or "(없음)", after or "(삭제)", why, hit))
+    return scn, lab
+
+
+def write_train(P):
+    scn, lab = train_rows(P)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "안내"
+    rules = [ln.strip() for ln in train_a.__doc__.split("라벨 기준")[1].splitlines()[1:] if ln.strip()]
+    for r in [["학습용 변경 시나리오·영향 라벨 — LLM 초안, 사람 검수 전 (DATA-06)"], [],
+              ["테스트셋(DATA-03)이 아니다. 검수자가 '검수 결과' 칸에 확인·수정을 적은 뒤 학습·프롬프트 조정에 쓴다."],
+              ["시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 변경 1건이다. 문서 파일(v2·v3)은 만들지 않는다."],
+              ["소유 팀은 항상 알림이라 판정 쌍에서 뺐다. '경계'가 Y인 쌍은 라벨 가이드(DATA-02) 경계 사례 후보다."], [],
+              ["라벨 기준"]] + [[x] for x in rules]:
+        ws.append(r)
+    ws["A1"].font = Font(name=FONT, bold=True, size=14)
+    ws.column_dimensions["A"].width = 120
+    xl_sheet(wb, "시나리오", f"{P.PROJECT} — 학습용 변경 시나리오 {len(scn)}건 (HEAD 기준, 서로 독립)",
+             ["시나리오 ID", "문서", "소유 팀", "유형", "위치", "이전", "이후", "변경 사유", "영향 있음 팀 수"], scn,
+             (11, 22, 18, 9, 14, 40, 40, 30, 8))
+    xl_sheet(wb, "영향 라벨", "변경 × 팀 영향 라벨 (소유 팀 제외) — LLM 초안, 검수 전",
+             ["시나리오 ID", "문서", "소유 팀", "팀", "판정", "경계", "근거", "검수자", "검수 결과"], lab,
+             (11, 22, 18, 20, 10, 5, 70, 8, 20))
+    pos = sum(r[4] == "영향 있음" for r in lab)
+    kinds = sorted({r[3] for r in scn})
+    owners = sorted({r[2] for r in scn})
+    xl_sheet(wb, "분포", "라벨·유형 분포", ["구분", "값", "건수"],
+             [("쌍", "전체", len(lab)), ("쌍", "영향 있음", pos), ("쌍", "영향 없음", len(lab) - pos),
+              ("쌍", "영향 있음 비율", f"{pos / len(lab):.1%}"), ("쌍", "경계 사례", sum(r[5] == "Y" for r in lab)),
+              ("시나리오", "전체", len(scn)), ("시나리오", "전 팀 영향 없음", sum(r[8] == 0 for r in scn))] +
+             [("유형", k, sum(r[3] == k for r in scn)) for k in kinds] +
+             [("소유 팀", o, sum(r[2] == o for r in scn)) for o in owners], (10, 22, 8))
+    SCN_DIR.mkdir(exist_ok=True)
+    wb.save(SCN_DIR / f"{P.FOLDER}_학습용_변경시나리오.xlsx")
+    return len(scn), len(lab), pos
+
+
 def write_overview(P, out, heads, log, found_head):
     tn, ro = team_name(P), roster(P)
     L = [f"# {P.CODE}. {P.PROJECT} — 프로젝트 개요·팀 구성 (가상)", "",
          f"> DATA-01 가상 프로젝트 문서 세트(데이터셋 개정 {P.FOLDER[:8]}). 실존 회사·인물과 무관한 가상 데이터입니다.",
          "> 폴더명의 날짜는 데이터셋 개정일, 안쪽 v1·v2·v3는 문서 버전입니다.",
-         "> 시스템(HEAD·검색·챗봇)에 올리는 것은 v1·v2·v3 문서뿐입니다. 승인대기·반려는 제출본, `문서이력.xlsx`는 이력 기록이며,",
+         "> 시스템(HEAD·검색·챗봇)에 올리는 것은 v1·v2… 버전 폴더의 문서뿐입니다. 승인대기·반려는 제출본, `문서이력.xlsx`는 이력 기록이며,",
          f"> 질문셋은 `2_질문셋/`, 변경 예시·영향 라벨은 `3_변경시나리오/`에 따로 있습니다.", "",
          "## 1. 프로젝트", "", "| 항목 | 내용 |", "|---|---|"] + [f"| {k} | {v} |" for k, v in P.OVERVIEW] + [
          f"| 수행사 | {company.COMPANY} |", "",
          "## 2. 조직과 역할", "",
          f"- 오너(PM): {pname(P.OWNER)}({P.OWNER}) — 프로젝트 생성·종료, PMO 문서 승인",
          f"- PMO 멤버: " + ", ".join(f"{pname(m)}({m})" for m in P.PMO[3]),
-         "- 작성자 = 멤버, 승인자 = 소유 팀 팀장 (본인 승인 없음)", "",
-         "| 팀 | 팀장 | 멤버 | 하는 일 | 소유 문서 | 주로 참조하는 문서 |", "|---|---|---|---|---|---|"]
+         ("- 승인자 = 소유 팀 팀장. 팀장이 작성한 문서는 같은 팀 대리 승인자가 승인하고(본인 승인 금지), 팀장 부재 시에도 대리 승인자가 승인한다"
+          if deputy(P) else "- 작성자 = 멤버, 승인자 = 소유 팀 팀장 (본인 승인 없음)")]
+    others = [Q for Q in PROJECTS if Q is not P]
+    dual = [(pid, role, [f"{Q.CODE}:{roster(Q)[pid][1]}" for Q in others if pid in roster(Q)]) for pid, role in roster(P).items()]
+    dual = [(pid, role, o) for pid, role, o in dual if o]
+    if dual:
+        L.append("- 다른 프로젝트 동시 수행: " + ", ".join(f"{pname(pid)}({pid}, {P.CODE}:{role[1]} · {', '.join(o)})" for pid, role, o in dual))
+    dp = deputy(P)
+    L += ["", "| 팀 | 팀장 | " + ("대리 승인자 | " if dp else "") + "멤버 | 하는 일 | 소유 문서 | 주로 참조하는 문서 |",
+          "|---|---|" + ("---|" if dp else "") + "---|---|---|---|"]
     for code, name, ldr, members, job in P.TEAMS:
         own = ", ".join(s["name"] for s in P.DOCS.values() if s["team"] == code)
         refs = ", ".join(P.DOCS[r]["name"] for r in P.REFS[code])
-        L.append(f"| {name} | {pname(ldr)}({ldr}) | " + ", ".join(f"{pname(m)}({m})" for m in members) + f" | {job} | {own} | {refs} |")
+        L.append(f"| {name} | {pname(ldr)}({ldr}) | " + (f"{pname(dp[code])}({dp[code]}) | " if dp else "") +
+                 ", ".join(f"{pname(m)}({m})" for m in members) + f" | {job} | {own} | {refs} |")
     L += ["", "게스트(발주처, 오너가 프로젝트 단위로 초대 — '외부 공유' 문서만 열람, MCP 불가):", ""] + [f"- {x[1]}({x[0]}) — {x[4]} {x[3]}, {x[2]}" for x in P.EXTERNAL]
     L += ["", "## 3. 문서 공개 범위 4단계", "", "> 261118 기획서 최종본 4-1 기준. 오너(PM)는 모든 문서를 볼 수 있습니다.", "",
           "| 공개 범위 | 열람 가능 |", "|---|---|"] + [f"| {g} | {w} |" for g, w in P.GRADES]
-    L += ["", "## 4. 문서 목록과 HEAD (2026-11-18 기준)", "",
-          "| No | 문서 | 소유 팀 | 작성자 | 승인자 | 공개 범위 | HEAD | HEAD 파일 |", "|---|---|---|---|---|---|---|---|"]
+    L += ["", f"## 4. 문서 목록과 HEAD ({P.ASOF} 기준)", "",
+          "| No | 문서 | 형식 | 소유 팀 | 작성자 | HEAD 승인자 | 공개 범위 | HEAD | HEAD 파일 |", "|---|---|---|---|---|---|---|---|---|"]
     for k, s in P.DOCS.items():
-        L.append(f"| {s['no']:02d} | {s['name']} | {tn[s['team']]} | {pname(s['author'])} | {pname(lead(P)[s['team']])} | {s['grade']} | "
+        L.append(f"| {s['no']:02d} | {s['name']} | {heads[k][3].suffix[1:]} | {tn[s['team']]} | {pname(s['author'])} | {pname(heads[k][5])} | {s['grade']} | "
                  f"v{heads[k][0]} | `{heads[k][3].relative_to(out).as_posix()}` |")
-    L += ["", "## 5. ID 체계와 참조 방향", "",
-          "- 요구사항 FR-001~028 · NFR-001~008 → 업무 프로세스 P-01~07(BR·EX) → 화면 SCR-001~015 → 인터페이스 IF-001~038 → 테이블 TB_* → 테스트케이스 TC-001~038",
-          "- 인터페이스는 담당 팀으로 문서가 나뉜다: 회원·상품 API(05), 주문·결제 API·배치(06), 외부·레거시 연계(07)",
+    top = max(h[0] for h in heads.values())
+    L += ["", "## 5. ID 체계와 참조 방향", ""] + P.ID_NOTES + [
           "- 요구사항정의서 '6. 요구사항 추적표'가 이 연결을 한 표로 보여 준다. `build_docset.py`의 `check()`가 참조가 끊기지 않았는지 검사한다.", "",
           "## 6. 폴더 구조", "", "```",
-          f"{P.FOLDER}/", "  00_프로젝트개요_팀구성.md   이 파일", "  v1/        기준선 — 14개 문서 모두 v1",
-          "  v2/, v3/   승인된 변경으로 생긴 그 버전의 문서만 (문서별 HEAD = 가장 높은 버전 폴더)",
+          f"{P.FOLDER}/", "  00_프로젝트개요_팀구성.md   이 파일", f"  v1/        기준선 — {len(P.DOCS)}개 문서 모두 v1",
+          f"  v2/ ~ v{top}/   승인된 변경으로 생긴 그 버전의 문서만 (문서별 HEAD = 가장 높은 버전 폴더)",
           "  승인대기/  승인 담당자가 아직 처리하지 않은 제출본 (HEAD 아님, 승인 화면 비교용)",
           "  반려/      반려된 제출본 (HEAD 아님, 반려 사유는 문서이력.xlsx의 '변경 요청' 시트)",
           "  문서이력.xlsx  문서별 HEAD 현황 + 변경 요청 이력(승인·반려·대기)", "```", "",
-          "## 7. 변경 요청 요약", "", "| 변경 ID | 문서 | 버전 | 상태 | 작성자 → 승인 담당 | 처리일 | 요약 |", "|---|---|---|---|---|---|---|"]
-    for c, bv, nv, _ in log:
+          "## 7. 변경 요청 요약", "", "| 변경 ID | 문서 | 버전 | 상태 | 작성자 → 승인 담당 | 승인 구분 | 처리일 | 요약 |", "|---|---|---|---|---|---|---|---|"]
+    for c, bv, nv, _, apv in log:
         s = P.DOCS[c["doc"]]
-        L.append(f"| {c['id']} | {s['name']} | v{bv} → v{nv} | {c['status']} | {pname(c['author'])} → {pname(lead(P)[s['team']])} | {c['done'] or '-'} | {c['summary']} |")
+        L.append(f"| {c['id']} | {s['name']} | v{bv} → v{nv} | {c['status']} | {pname(c['author'])} → {pname(apv)} | "
+                 f"{apv_kind(P, s['team'], c['author'], apv)} | {c['done'] or '-'} | {c['summary']} |")
     L += ["", "## 8. 반복되는 값 (현재 HEAD, 정규식 자동 검출)", "",
           "⚠️는 문서마다 값이 다르다는 뜻입니다(변경이 일부 문서에만 반영된 상태 등). 위치 전체는 `3_변경시나리오/` 엑셀의 '반복값 위치(HEAD)' 시트에 있습니다.", "",
           "| 항목 | 값 | 나오는 문서 |", "|---|---|---|"]
@@ -707,9 +1107,11 @@ def check(P):
             assert f[0] in next(x[4] for x in SCR if x[0] == s), f"{f[0]} -> {s} 역참조 없음"
     for s in SCR:
         assert set(s[4]) <= fr and set(s[5]) <= ifs and s[7] in codes, s[0]
+    if_teams = {s["team"] for s in P.DOCS.values() if s["model"] == "if"}
+    eif_team = next(s["team"] for s in P.DOCS.values() if s.get("eif"))
     for i in IF:
-        assert set(i[8]) <= scr and set(i[9]) <= tbs and i[13] in ("MP", "OP", "CT"), i[0]
-        assert i[13] == "CT" or i[2] in ("내부 API", "배치"), f"{i[0]} 외부 연계는 공통기술팀 소유"
+        assert set(i[8]) <= scr and set(i[9]) <= tbs and i[13] in if_teams, i[0]
+        assert i[13] == eif_team or i[2] in ("내부 API", "배치"), f"{i[0]} 외부 연계는 연계정의서 소유 팀"
         for s in i[8]:
             assert i[0] in next(x[5] for x in SCR if x[0] == s), f"{i[0]} -> {s} 역참조 없음"
     for p in PROC:
@@ -723,21 +1125,41 @@ def check(P):
     for t in TB:
         for c in t[3]:
             if "FK" in c[4]:
-                rt, rc = c[6].split(".")
+                rt, rc = re.match(r"(\w+)\.(\w+)", c[6]).groups()
                 assert any(c2[0] == rc for x in TB if x[0] == rt for c2 in x[3]), (t[0], c[0])
-    # 조직: 팀장 ≠ 멤버, 멤버 3명 이상, 작성자는 소유 팀 멤버(본인 승인 금지)
-    ro, ld = roster(P), lead(P)
+    # 조직: 팀장 ≠ 멤버, 멤버 3명 이상, 대리 승인자는 같은 팀 멤버, 작성자는 소유 팀 소속, 승인자 ≠ 작성자(본인 승인 금지)
+    ro, ld, dp = roster(P), lead(P), deputy(P)
     for code, _, ldr, members, _ in P.TEAMS:
         assert len(members) >= 3 and ldr not in members, code
+    for code, x in dp.items():
+        assert x in next(t[3] for t in teams(P) if t[0] == code), f"{code} 대리 승인자는 같은 팀 멤버"
     for k, s in P.DOCS.items():
         assert s["grade"] in {g[0] for g in P.GRADES}, f"{k} 공개 범위"
-        assert ro[s["author"]] == (s["team"], "멤버") and s["author"] != ld[s["team"]], f"{k} 작성자"
+        assert in_team(P, s["author"], s["team"]) and approver_of(P, s["team"], s["author"]) != s["author"], f"{k} 작성자"
+    dates = [c["req"] for c in P.CHANGES]
+    assert dates == sorted(dates), "CHANGES는 요청일 순"
     for c in P.CHANGES:
-        assert ro[c["author"]] == (P.DOCS[c["doc"]]["team"], "멤버"), f"{c['id']} 작성자는 소유 팀 멤버"
+        team = P.DOCS[c["doc"]]["team"]
+        apv = approver_of(P, team, c["author"], c.get("approver"))
+        assert in_team(P, c["author"], team), f"{c['id']} 작성자는 소유 팀 소속"
+        assert apv != c["author"] and apv in (ld[team], dp.get(team)), f"{c['id']} 승인자는 작성자가 아닌 팀장·대리 승인자"
         assert c["id"] in P.IMPACT
-    for q in questions.QUESTIONS:
+    for q in (q for q in questions.QUESTIONS if q[0] == P.CODE):
         assert set(q[2].split(";")) <= questions.INTENTS, f"의도 라벨 오타: {q[1]}"
         assert q[4] in ro or q[4] in EMP, f"질문자 없음: {q[1]}"
+    # 학습용 시나리오: 이전 문자열이 HEAD 해당 항목에 실제로 있는지, 팀·판정 값이 맞는지
+    hd = head_data(P)
+    for n, (doc, kind, key, loc, before, after, why, labels) in enumerate(TRAIN.get(P.CODE, []), 1):
+        sid = f"TR-{P.CODE}-{n:03d}"
+        assert doc in P.DOCS and key in hd and kind in ("값 변경", "항목 추가", "항목 삭제", "흐름 변경", "표현 수정"), sid
+        if before:
+            items = [x for x in hd[key] if x[0] == loc] or hd[key]  # 블록 문서(ARCH 등)는 문서 전체에서 찾는다
+            assert any(before in str(x) for x in items), f"{sid}: HEAD {loc}에 '{before}' 없음"
+        assert before or after, sid
+        for t, j, r in labels:
+            assert t in codes and t != P.DOCS[doc]["team"] and j in ("있음", "없음"), (sid, t)
+            assert j == "없음" or r, f"{sid} {t}: 영향 있음은 근거 필수"
+        assert len({t for t, *_ in labels}) == len(labels), f"{sid}: 팀 중복"
 
 
 if __name__ == "__main__":
@@ -746,6 +1168,8 @@ if __name__ == "__main__":
         heads, log = build_project(P)
         print(f"{P.FOLDER}: 문서 {len(P.DOCS)} · FR {len(P.FR)} · NFR {len(P.NFR)} · 프로세스 {len(P.PROC)} · SCR {len(P.SCR)} · IF {len(P.IF)} · "
               f"TB {len(P.TB)} · TC {len(P.TC)} · 변경 {len(log)} · HEAD " + ", ".join(f"{k}=v{v[0]}" for k, v in heads.items()))
+        if P.CODE in TRAIN:
+            print("학습용 시나리오 %d건 · 쌍 %d · 영향 있음 %d" % write_train(P))
     write_company()
     write_questions()
     print(f"질문 {len(questions.QUESTIONS)} -> {ROOT}")
