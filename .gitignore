@@ -1,17 +1,51 @@
-# env
+# ---------- 환경 변수 (비밀번호·API 키) ----------
 .env
+.env.*
+!.env.example
 
-# node / frontend
+# ---------- Python / backend ----------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ---------- Node / frontend ----------
 node_modules/
 dist/
+dist-ssr/
+*.local
 
-# python
-.venv/
-__pycache__/
+# ---------- 로그 ----------
+logs/
+*.log
 
-# local
-.serena/
+# ---------- 로컬 데이터 ----------
+# 로컬 파일 저장소 (STORAGE_BACKEND=local)
 .storage/
-.DS_Store
+# DB 덤프
+*.dump
+*.sql.gz
 
+# ---------- 인증서·키 파일 ----------
+*.pem
+*.key
+
+# ---------- 에디터 / OS ----------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---------- AI 도구 ----------
+.serena/
+.claude/settings.local.json
 claude.md
