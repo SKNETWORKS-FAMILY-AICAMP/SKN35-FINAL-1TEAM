@@ -1,0 +1,166 @@
+# 가나유통 온라인몰 차세대 구축 — ERD
+
+| 항목 | 내용 |
+|---|---|
+| 프로젝트명 | 가나유통 온라인몰 차세대 구축 |
+| 발주처 | (가상) 가나유통 |
+| 수행사 | (가상) 누리정보기술 |
+| 작성 팀 | 공통기술·연계&데이터(DA) |
+| 문서 버전 | v1 |
+| 문서 상태 | HEAD 승인본 |
+| 공개 범위 | 프로젝트 내부 |
+| 최초 작성일 | 2026-10-20 |
+| 작성자 | 황보은 |
+| 검토자 | 배지훈 |
+| 승인자 | 문가람 |
+
+## 개정 이력
+
+| 버전 | 일자 | 변경 내용 | 작성자 | 승인자 |
+|---|---|---|---|---|
+| v1 | 2026-10-20 | 최초 작성 | 황보은 | 문가람 |
+
+테이블정의서의 PK·FK·UK로 그린 논리 ERD. 테이블 19개, 관계 24개.
+
+## 1. 다이어그램
+
+```mermaid
+erDiagram
+  TB_MEMBER ||--o{ TB_LOGIN_HISTORY : "MBR_ID"
+  TB_MEMBER ||--o{ TB_EMAIL_TOKEN : "MBR_ID"
+  TB_MEMBER ||--o{ TB_ADDRESS : "MBR_ID"
+  TB_CATEGORY |o--o{ TB_CATEGORY : "PARENT_CTGR_ID"
+  TB_CATEGORY |o--o{ TB_PRODUCT : "CTGR_ID"
+  TB_PRODUCT ||--o{ TB_PRODUCT_OPTION : "PRD_ID"
+  TB_MEMBER ||--o{ TB_SEARCH_KEYWORD : "MBR_ID"
+  TB_MEMBER ||--o{ TB_CART : "MBR_ID"
+  TB_PRODUCT_OPTION ||--o{ TB_CART : "OPT_ID"
+  TB_MEMBER ||--o{ TB_ORDER : "MBR_ID"
+  TB_ORDER ||--o{ TB_ORDER_ITEM : "ORD_NO"
+  TB_PRODUCT_OPTION ||--o{ TB_ORDER_ITEM : "OPT_ID"
+  TB_ORDER ||--o{ TB_PAYMENT : "ORD_NO"
+  TB_ORDER ||--o{ TB_DELIVERY : "ORD_NO"
+  TB_COUPON ||--o{ TB_COUPON_ISSUE : "CPN_ID"
+  TB_MEMBER ||--o{ TB_COUPON_ISSUE : "MBR_ID"
+  TB_ORDER |o--o{ TB_COUPON_ISSUE : "USED_ORD_NO"
+  TB_MEMBER ||--o{ TB_POINT_HISTORY : "MBR_ID"
+  TB_ORDER |o--o{ TB_POINT_HISTORY : "ORD_NO"
+  TB_REVIEW |o--o{ TB_POINT_HISTORY : "REVIEW_ID"
+  TB_ORDER_ITEM ||--o| TB_REVIEW : "ORD_ITEM_ID"
+  TB_MEMBER ||--o{ TB_REVIEW : "MBR_ID"
+  TB_PRODUCT ||--o{ TB_REVIEW : "PRD_ID"
+  TB_MEMBER ||--o| TB_LEGACY_MEMBER_MAP : "MBR_ID"
+  TB_MEMBER {
+    BIGINT MBR_ID PK
+    VARCHAR EMAIL UK
+  }
+  TB_LOGIN_HISTORY {
+    BIGINT LOGIN_HIST_ID PK
+    BIGINT MBR_ID FK
+  }
+  TB_EMAIL_TOKEN {
+    VARCHAR TOKEN PK
+    BIGINT MBR_ID FK
+  }
+  TB_ADDRESS {
+    BIGINT ADDR_ID PK
+    BIGINT MBR_ID FK
+  }
+  TB_CATEGORY {
+    BIGINT CTGR_ID PK
+    BIGINT PARENT_CTGR_ID FK
+  }
+  TB_PRODUCT {
+    BIGINT PRD_ID PK
+    VARCHAR ERP_PRD_CD UK
+    BIGINT CTGR_ID FK
+  }
+  TB_PRODUCT_OPTION {
+    BIGINT OPT_ID PK
+    BIGINT PRD_ID FK
+    VARCHAR ERP_ITEM_CD UK
+  }
+  TB_SEARCH_KEYWORD {
+    BIGINT MBR_ID PK_FK
+    VARCHAR KEYWORD PK
+  }
+  TB_CART {
+    BIGINT CART_ID PK
+    BIGINT MBR_ID FK
+    BIGINT OPT_ID FK
+  }
+  TB_ORDER {
+    VARCHAR ORD_NO PK
+    BIGINT MBR_ID FK
+  }
+  TB_ORDER_ITEM {
+    BIGINT ORD_ITEM_ID PK
+    VARCHAR ORD_NO FK
+    BIGINT OPT_ID FK
+  }
+  TB_PAYMENT {
+    BIGINT PAY_ID PK
+    VARCHAR ORD_NO FK
+  }
+  TB_DELIVERY {
+    BIGINT DLV_ID PK
+    VARCHAR ORD_NO FK
+  }
+  TB_COUPON {
+    BIGINT CPN_ID PK
+  }
+  TB_COUPON_ISSUE {
+    BIGINT CPN_ISSUE_ID PK
+    BIGINT CPN_ID FK
+    BIGINT MBR_ID FK
+    VARCHAR USED_ORD_NO FK
+  }
+  TB_POINT_HISTORY {
+    BIGINT POINT_HIST_ID PK
+    BIGINT MBR_ID FK
+    VARCHAR ORD_NO FK
+    BIGINT REVIEW_ID FK
+  }
+  TB_REVIEW {
+    BIGINT REVIEW_ID PK
+    BIGINT ORD_ITEM_ID FK_UK
+    BIGINT MBR_ID FK
+    BIGINT PRD_ID FK
+  }
+  TB_LEGACY_MEMBER_MAP {
+    VARCHAR LEGACY_MBR_NO PK
+    BIGINT MBR_ID FK_UK
+  }
+  TB_IF_LOG {
+    BIGINT IF_LOG_ID PK
+  }
+```
+
+## 2. 관계 목록
+
+| 부모 테이블 | 자식 테이블 | FK 컬럼 | 카디널리티 | 참조 |
+|---|---|---|---|---|
+| TB_MEMBER | TB_LOGIN_HISTORY | MBR_ID | 1:N | 필수 |
+| TB_MEMBER | TB_EMAIL_TOKEN | MBR_ID | 1:N | 필수 |
+| TB_MEMBER | TB_ADDRESS | MBR_ID | 1:N | 필수 |
+| TB_CATEGORY | TB_CATEGORY | PARENT_CTGR_ID | 1:N | 선택 |
+| TB_CATEGORY | TB_PRODUCT | CTGR_ID | 1:N | 선택 |
+| TB_PRODUCT | TB_PRODUCT_OPTION | PRD_ID | 1:N | 필수 |
+| TB_MEMBER | TB_SEARCH_KEYWORD | MBR_ID | 1:N | 필수 |
+| TB_MEMBER | TB_CART | MBR_ID | 1:N | 필수 |
+| TB_PRODUCT_OPTION | TB_CART | OPT_ID | 1:N | 필수 |
+| TB_MEMBER | TB_ORDER | MBR_ID | 1:N | 필수 |
+| TB_ORDER | TB_ORDER_ITEM | ORD_NO | 1:N | 필수 |
+| TB_PRODUCT_OPTION | TB_ORDER_ITEM | OPT_ID | 1:N | 필수 |
+| TB_ORDER | TB_PAYMENT | ORD_NO | 1:N | 필수 |
+| TB_ORDER | TB_DELIVERY | ORD_NO | 1:N | 필수 |
+| TB_COUPON | TB_COUPON_ISSUE | CPN_ID | 1:N | 필수 |
+| TB_MEMBER | TB_COUPON_ISSUE | MBR_ID | 1:N | 필수 |
+| TB_ORDER | TB_COUPON_ISSUE | USED_ORD_NO | 1:N | 선택 |
+| TB_MEMBER | TB_POINT_HISTORY | MBR_ID | 1:N | 필수 |
+| TB_ORDER | TB_POINT_HISTORY | ORD_NO | 1:N | 선택 |
+| TB_REVIEW | TB_POINT_HISTORY | REVIEW_ID | 1:N | 선택 |
+| TB_ORDER_ITEM | TB_REVIEW | ORD_ITEM_ID | 1:0..1 | 필수 |
+| TB_MEMBER | TB_REVIEW | MBR_ID | 1:N | 필수 |
+| TB_PRODUCT | TB_REVIEW | PRD_ID | 1:N | 필수 |
+| TB_MEMBER | TB_LEGACY_MEMBER_MAP | MBR_ID | 1:0..1 | 필수 |
