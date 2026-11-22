@@ -3,7 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Response, status
 
 from app.auth import service
-from app.auth.schemas import LoginRequest, SignupRequest, SignupResponse, TokenResponse
+from app.auth.schemas import (
+    LoginRequest,
+    SignupRequest,
+    SignupResponse,
+    TokenResponse,
+)
 from app.core.config import settings
 from app.db.session import SessionDep
 
