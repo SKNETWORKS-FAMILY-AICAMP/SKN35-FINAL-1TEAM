@@ -4,11 +4,11 @@ from datetime import date
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppError, ConflictError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.organizations import nts
 from app.organizations import repository as org_repo
-from app.organizations.models import UserLevel
+from app.organizations.models import Company, User, UserLevel
 
 # 사람이 읽고 입력하기 쉽게 헷갈리는 문자(0/O, 1/I/L) 제외
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -90,3 +90,30 @@ async def register_company(
         raise ConflictError("이미 등록된 회사입니다.") from None
 
     return company.company_id, invite_code, admin_email, admin_password
+
+
+# 내 회사 조회: 초대 코드는 ADMIN에게만 반환
+async def get_my_company(
+    db: AsyncSession, current_user: User
+) -> tuple[Company, str | None]:
+    if current_user.company_id is None:
+        raise NotFoundError("소속 회사를 찾을 수 없습니다.")
+
+    company = await org_repo.get_company_by_id(db, current_user.company_id)
+
+    if company is None:
+        raise NotFoundError("소속 회사를 찾을 수 없습니다.")
+
+    invite_code = (
+        company.invite_code if current_user.user_type == UserLevel.ADMIN else None
+    )
+
+    return company, invite_code
+
+
+# 내 회사의 재직 직원 목록 조회
+async def get_company_users(db: AsyncSession, current_user: User) -> list[User]:
+    if current_user.company_id is None:
+        raise NotFoundError("소속 회사를 찾을 수 없습니다.")
+
+    return await org_repo.get_active_company_users(db, current_user.company_id)

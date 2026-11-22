@@ -76,3 +76,37 @@ async def get_active_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return await db.scalar(
         select(User).where(User.user_id == user_id, User.is_deleted == YN.N)
     )
+
+
+# 삭제되지 않은 사용자들을 id 목록으로 조회
+async def get_active_users_by_ids(db: AsyncSession, user_ids: list[int]) -> list[User]:
+    result = await db.scalars(
+        select(User).where(User.user_id.in_(user_ids), User.is_deleted == YN.N)
+    )
+    return list(result)
+
+
+# 회사 id로 회사 조회
+async def get_company_by_id(db: AsyncSession, company_id: int) -> Company | None:
+    return await db.scalar(select(Company).where(Company.company_id == company_id))
+
+
+# 회사의 재직 직원 목록 조회 (서비스 이용 계정이 아닌 ADMIN 제외)
+async def get_active_company_users(db: AsyncSession, company_id: int) -> list[User]:
+    result = await db.scalars(
+        select(User)
+        .where(
+            User.company_id == company_id,
+            User.is_deleted == YN.N,
+            User.user_type != UserLevel.ADMIN,
+        )
+        .order_by(User.name, User.user_id)
+    )
+    return list(result)
+
+
+# 초대 코드로 회사 조회
+async def get_company_by_invite_code(
+    db: AsyncSession, invite_code: str
+) -> Company | None:
+    return await db.scalar(select(Company).where(Company.invite_code == invite_code))

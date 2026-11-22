@@ -1,6 +1,8 @@
 from datetime import date
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.organizations.models import UserLevel
 
 
 class CompanyRegisterRequest(BaseModel):
@@ -43,3 +45,26 @@ class CompanyRegisterResponse(BaseModel):
     invite_code: str
     admin_email: str
     admin_password: str
+
+
+# 내 회사 조회 응답 (초대 코드는 ADMIN에게만 제공)
+class CompanyResponse(BaseModel):
+    company_id: int
+    name: str | None
+    invite_code: str | None
+
+
+# 회사 직원 1명 응답
+class CompanyUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    dept_id: int | None
+    name: str
+    email: str
+    user_type: UserLevel
+
+
+# 회사 직원 목록 응답
+class CompanyUsersResponse(BaseModel):
+    users: list[CompanyUserResponse]
