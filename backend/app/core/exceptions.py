@@ -18,6 +18,16 @@ class UnauthorizedError(AppError):
     detail = "인증에 실패했습니다."
 
 
+class ForbiddenError(AppError):
+    status_code = status.HTTP_403_FORBIDDEN
+    detail = "권한이 없습니다."
+
+
+class NotFoundError(AppError):
+    status_code = status.HTTP_404_NOT_FOUND
+    detail = "데이터를 찾을 수 없습니다."
+
+
 class ConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
     detail = "이미 존재하는 데이터입니다."

@@ -1,9 +1,16 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.organizations.models import UserLevel
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
 
 
 class TokenResponse(BaseModel):
@@ -23,7 +30,7 @@ class SignupRequest(BaseModel):
     def normalize_invite_code(cls, v: str) -> str:
         return v.strip().upper()
 
-    @field_validator("invite_code")
+    @field_validator("name")
     @classmethod
     def strip_name(cls, v: str) -> str:
         v = v.strip()
@@ -32,9 +39,26 @@ class SignupRequest(BaseModel):
 
         return v
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
 
 class SignupResponse(BaseModel):
     user_id: int
     email: str
     name: str
     company_name: str | None
+
+
+# 로그인 사용자 정보 응답
+class MeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    company_id: int | None
+    dept_id: int | None
+    name: str
+    email: str
+    user_type: UserLevel
