@@ -86,8 +86,8 @@ DOCS = {
     "erd": dict(no=10, name="ERD", team="CT", author="E052", reviewer="E081", grade="프로젝트 내부", date="2026-11-03", model="erd"),
     "mig": dict(no=11, name="데이터이행계획서", team="CT", author="E084", reviewer="E073", grade="팀 내부", date="2026-11-05", model="blocks", data="MIG", fmt="txt"),
     "tplan": dict(no=12, name="테스트계획서", team="QA", author="E060", reviewer="E075", grade="프로젝트 내부", date="2026-11-05", model="blocks", data="TPLAN", fmt="pdf"),
-    "tc": dict(no=13, name="테스트케이스_결과서", team="QA", author="E074", reviewer="E073", grade="프로젝트 내부", date="2026-11-09", model="tc"),
-    "wbs": dict(no=14, name="WBS_일정표", team="PMO", author="E076", reviewer="E070", grade="외부 공유", date="2026-10-14", model="wbs"),
+    "tc": dict(no=13, name="테스트케이스_결과서", team="QA", author="E074", reviewer="E073", grade="프로젝트 내부", date="2026-11-09", model="tc", xl="messy"),
+    "wbs": dict(no=14, name="WBS_일정표", team="PMO", author="E076", reviewer="E070", grade="외부 공유", date="2026-10-14", model="wbs", xl="messy"),
 }
 DATA_KEYS = ["ROLES", "FR", "PERM", "NFR", "OPEN_ISSUES", "PROC", "SCR", "IF", "EIF_SYSTEMS", "EIF_COMMON",
              "POLICY", "ARCH", "TB", "CODES", "MIG", "TPLAN", "TC", "DEFECTS", "WBS", "MILESTONES"]

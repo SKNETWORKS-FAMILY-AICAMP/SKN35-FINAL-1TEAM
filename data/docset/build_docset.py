@@ -47,12 +47,14 @@ import project_a
 import project_b
 import questions
 import train_a
+import train_b
 
 ROOT = Path(__file__).parent
 DOC_DIR, Q_DIR, SCN_DIR = ROOT / "1_문서세트", ROOT / "2_질문셋", ROOT / "3_변경시나리오"  # DATA-01 / DATA-07 / DATA-03
 FONT = "맑은 고딕"
 PROJECTS = [project_a, project_b]
-TRAIN = {"A": train_a.SCENARIOS}  # 학습용 변경 시나리오(DATA-06 초안)
+TRAIN = {"A": train_a.SCENARIOS, "B": train_b.SCENARIOS}
+TRAIN_DOC = {"A": train_a.__doc__, "B": train_b.__doc__}  # 학습용 변경 시나리오(DATA-06 초안)
 EMP = {e[0]: e for e in company.EMPLOYEES}
 EXT = {x[0]: x for p in PROJECTS for x in p.EXTERNAL}
 
@@ -310,9 +312,181 @@ def render_xlsx(path, meta, sheets):
     ws["A1"].font = Font(name=FONT, bold=True, size=16)
     for w, col in zip((16, 40, 44, 12, 12), "ABCDE"):
         ws.column_dimensions[col].width = w
+    cache = {}  # (시트명, 셀) → 수식 계산값. Excel 저장본처럼 캐시 값을 넣어 data_only 읽기도 값이 나오게 한다
     for s in sheets:
-        xl_sheet(wb, *s[:5])
+        fn = MESSY.get(s[0]) if meta.get("xl") == "messy" else None
+        if fn:
+            fn(wb, s, meta, cache)
+        else:
+            xl_sheet(wb, *s[:5])
+    wb.calculation.fullCalcOnLoad = True
     wb.save(path)
+    if cache:
+        _inject_cached(path, wb.sheetnames, cache)
+
+
+# ── 파싱 난이도 높은 xlsx(meta xl="messy"): 병합 셀·2단 헤더·소계 수식·날짜 셀·숨김 열·시트 간 COUNTIFS ──
+CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+SUB_FILL = PatternFill("solid", fgColor="F2F2F2")
+
+
+def _d(s):
+    import datetime
+    return datetime.date.fromisoformat(s)
+
+
+def _style(ws, r1, r2, ncol, head_rows=()):
+    for row in ws.iter_rows(min_row=r1, max_row=r2, max_col=ncol):
+        for c in row:
+            c.border = BOX
+            c.font = Font(name=FONT, size=10, bold=c.row in head_rows)
+            if c.row in head_rows:
+                c.fill, c.alignment = HEAD_FILL, CENTER
+            elif c.alignment.horizontal is None:
+                c.alignment = WRAP
+
+
+def xl_wbs_messy(wb, s, meta, cache):
+    """1. WBS: 제목·기준일 병합, 2단 헤더(일정=시작/종료), 단계 세로 병합, 단계별 소계 행(SUM·AVERAGE), 전체 행, 숨김 가중치 열."""
+    title, rows = s[0], s[3]
+    ws = wb.create_sheet(title)
+    ws.merge_cells("A1:J1")
+    ws["A1"] = f"{meta['project']} — WBS 일정표"
+    ws["A1"].font = Font(name=FONT, bold=True, size=14)
+    ws.merge_cells("A2:J2")
+    ws["A2"] = f"기준일: {s[1].split('(')[-1].rstrip(')')}  |  문서 버전 {meta['version']}  |  진척률은 실적 기준, 소계는 단계 평균"
+    for col, h in zip("ABCDE", ["WBS ID", "단계", "작업", "담당 팀", "산출물"]):
+        ws[f"{col}4"] = h
+        ws.merge_cells(f"{col}4:{col}5")
+    ws["F4"] = "일정"
+    ws.merge_cells("F4:G4")
+    ws["F5"], ws["G5"] = "시작", "종료"
+    for col, h in zip("HIJK", ["기간(일)", "진척률", "상태", "가중치"]):
+        ws[f"{col}4"] = h
+        ws.merge_cells(f"{col}4:{col}5")
+    r, subs, data_rows = 6, [], []
+    runs = []
+    for row in rows:  # 연속된 같은 단계끼리 묶는다(떨어져 있으면 별도 묶음)
+        if runs and runs[-1][0] == row[1]:
+            runs[-1][1].append(row)
+        else:
+            runs.append((row[1], [row]))
+    for stage, items in runs:
+        first = r
+        for wid, _st, task, team, out, start, end, prog, state in items:
+            p = int(prog.rstrip("%")) / 100
+            days = (_d(end) - _d(start)).days + 1
+            ws.append([wid, stage if r == first else None, task, team, out, _d(start), _d(end), f"=G{r}-F{r}+1", p, state, f"=H{r}*I{r}"])
+            cache[(title, f"H{r}")], cache[(title, f"K{r}")] = days, days * p
+            ws[f"F{r}"].number_format = ws[f"G{r}"].number_format = "yyyy-mm-dd"
+            ws[f"I{r}"].number_format = "0%"
+            data_rows.append((r, days, p))
+            r += 1
+        last = r - 1
+        if last > first:
+            ws.merge_cells(f"B{first}:B{last}")
+        ws[f"B{first}"].alignment = CENTER
+        part = data_rows[-len(items):]
+        ws.append([None, f"소계({stage})", None, None, None, None, None, f"=SUM(H{first}:H{last})", f"=AVERAGE(I{first}:I{last})", None,
+                   f"=SUM(K{first}:K{last})"])
+        ws.merge_cells(f"B{r}:G{r}")
+        cache[(title, f"H{r}")] = sum(x[1] for x in part)
+        cache[(title, f"I{r}")] = sum(x[2] for x in part) / len(part)
+        cache[(title, f"K{r}")] = sum(x[1] * x[2] for x in part)
+        ws[f"I{r}"].number_format = "0%"
+        subs.append(r)
+        r += 1
+    ws.append([None, "전체(기간 가중 진척률)", None, None, None, None, None, "=" + "+".join(f"H{x}" for x in subs),
+               "=(" + "+".join(f"K{x}" for x in subs) + f")/H{r}", None, "=" + "+".join(f"K{x}" for x in subs)])
+    ws.merge_cells(f"B{r}:G{r}")
+    tot_h, tot_k = sum(x[1] for x in data_rows), sum(x[1] * x[2] for x in data_rows)
+    cache[(title, f"H{r}")], cache[(title, f"I{r}")], cache[(title, f"K{r}")] = tot_h, tot_k / tot_h, tot_k
+    ws[f"I{r}"].number_format = "0.0%"
+    _style(ws, 4, r, 11, head_rows=(4, 5))
+    for x in subs + [r]:
+        for c in ws[x][:11]:
+            c.fill, c.font = SUB_FILL, Font(name=FONT, size=10, bold=True)
+    for col, w in zip("ABCDEFGHIJK", (7, 8, 40, 24, 34, 11, 11, 8, 8, 8, 8)):
+        ws.column_dimensions[col].width = w
+    ws.column_dimensions["K"].hidden = True
+    ws.freeze_panes = "C6"
+
+
+def xl_tc_summary_messy(wb, s, meta, cache):
+    """3. 수행 요약: 단계 × 결과 피벗을 '1. 테스트케이스' 시트 COUNTIFS로 계산, 결과 헤더 병합, 합계 행·Pass율."""
+    title = s[0]
+    ws = wb.create_sheet(title)
+    ws.merge_cells("A1:G1")
+    ws["A1"] = "3. 단계별 수행 요약 (수식: '1. 테스트케이스' 시트 집계)"
+    ws["A1"].font = Font(name=FONT, bold=True, size=13)
+    ws["A3"] = "단계"
+    ws.merge_cells("A3:A4")
+    ws["B3"] = "수행 결과(건)"
+    ws.merge_cells("B3:E3")
+    ws["F3"], ws["G3"] = "합계", "Pass율"
+    ws.merge_cells("F3:F4")
+    ws.merge_cells("G3:G4")
+    results = ["Pass", "Fail", "Block", "미수행"]
+    for col, h in zip("BCDE", results):
+        ws[f"{col}4"] = h
+    cnt = {}
+    for st, res, n in s[3]:
+        cnt[(st, res)] = n
+    stages = list(dict.fromkeys(st for st, _, _ in s[3]))
+    src = "'1. 테스트케이스'"
+    r = 5
+    for st in stages:
+        ws[f"A{r}"] = st
+        for col, res in zip("BCDE", results):
+            ws[f"{col}{r}"] = f'=COUNTIFS({src}!$B:$B,$A{r},{src}!$I:$I,{col}$4)'
+            cache[(title, f"{col}{r}")] = cnt.get((st, res), 0)
+        tot = sum(cnt.get((st, x), 0) for x in results)
+        ws[f"F{r}"], ws[f"G{r}"] = f"=SUM(B{r}:E{r})", f"=IFERROR(B{r}/(F{r}-E{r}),0)"
+        done = tot - cnt.get((st, "미수행"), 0)
+        cache[(title, f"F{r}")], cache[(title, f"G{r}")] = tot, (cnt.get((st, "Pass"), 0) / done if done else 0)
+        ws[f"G{r}"].number_format = "0.0%"
+        r += 1
+    ws[f"A{r}"] = "합계"
+    for col in "BCDEF":
+        ws[f"{col}{r}"] = f"=SUM({col}5:{col}{r - 1})"
+        cache[(title, f"{col}{r}")] = sum(cache[(title, f"{col}{x}")] for x in range(5, r))
+    ws[f"G{r}"] = f"=IFERROR(B{r}/(F{r}-E{r}),0)"
+    done = cache[(title, f"F{r}")] - cache[(title, f"E{r}")]
+    cache[(title, f"G{r}")] = cache[(title, f"B{r}")] / done if done else 0
+    ws[f"G{r}"].number_format = "0.0%"
+    _style(ws, 3, r, 7, head_rows=(3, 4))
+    for c in ws[r][:7]:
+        c.fill, c.font = SUB_FILL, Font(name=FONT, size=10, bold=True)
+    ws[f"A{r + 2}"] = "※ Pass율 = Pass ÷ (합계 − 미수행). 결과 열은 '1. 테스트케이스' 시트가 바뀌면 다시 계산된다."
+    for col, w in zip("ABCDEFG", (10, 9, 9, 9, 9, 9, 10)):
+        ws.column_dimensions[col].width = w
+
+
+MESSY = {"1. WBS": xl_wbs_messy, "3. 수행 요약": xl_tc_summary_messy}
+
+
+def _inject_cached(path, sheetnames, cache):
+    """openpyxl은 수식 셀의 계산값(<v>)을 비워 둔다 → 계산해 둔 값을 XML에 채운다(Excel 저장본과 같은 형태)."""
+    idx = {n: i for i, n in enumerate(sheetnames, 1)}
+    with zipfile.ZipFile(path) as z:
+        items = [(i, z.read(i.filename)) for i in z.infolist()]
+    for name in {k[0] for k in cache}:
+        target = f"xl/worksheets/sheet{idx[name]}.xml"
+        for n, (info, data) in enumerate(items):
+            if info.filename != target:
+                continue
+            xml = data.decode("utf-8")
+
+            def fill(m):
+                v = cache.get((name, m.group(1)))
+                if v is None:
+                    return m.group(0)
+                return f'<c r="{m.group(1)}"{m.group(2)}><f>{m.group(3)}</f><v>{round(v, 10)}</v></c>'
+            xml = re.sub(r'<c r="([A-Z]+\d+)"([^>]*)><f>(.*?)</f><v\s*/?>(?:</v>)?</c>', fill, xml)
+            items[n] = (info, xml.encode("utf-8"))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for info, data in items:
+            z.writestr(info, data)
 
 
 def render_docx(path, meta, blocks):
@@ -806,6 +980,10 @@ def apply_ops(d, ops):
             d[key][i] = d[key][i][:col] + (val,) + d[key][i][col + 1:]
         elif op[0] == "add":  # ("add", 데이터, 행)
             d[op[1]].append(op[2])
+        elif op[0] == "push":  # ("push", 데이터, 항목 ID, 열 인덱스, 값) — 항목 안 목록(화면 요소, 응답 항목 등)에 추가
+            _, key, iid, col, val = op
+            i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+            d[key][i] = d[key][i][:col] + (list(d[key][i][col]) + [val],) + d[key][i][col + 1:]
         else:
             next(t for t in d["TB"] if t[0] == op[1])[3].append(op[2])
 
@@ -817,7 +995,7 @@ def fname(s, kind):
 def meta_of(P, s, version, state, history, apv):
     return dict(name=s["name"], project=P.PROJECT, client=P.CLIENT, team=team_name(P)[s["team"]], version=version, state=state,
                 grade=s["grade"], date=s["date"], author=pname(s["author"]), reviewer=pname(s["reviewer"]),
-                approver=pname(apv), history=history)
+                approver=pname(apv), history=history, xl=s.get("xl"))
 
 
 def build_project(P):
@@ -863,7 +1041,7 @@ def build_project(P):
     found_head = scan(P, heads)
     write_truth(P, out, heads, log, diffs, found_head)
     write_overview(P, out, heads, log, found_head)
-    return heads, log
+    return heads, log, hist
 
 
 # ─────────────────────────── 정답·개요 ───────────────────────────
@@ -890,10 +1068,11 @@ def write_truth(P, out, heads, log, diffs, found_head):
     wb = Workbook()
     ws = wb.active
     ws.title = "안내"
-    for r in [["변경 예시와 영향 라벨 — LLM 작성 예시, 테스트셋 아님"], [],
+    for r in [["변경 이력 정답 — 이 폴더 문서(v2 이상·승인대기·반려)에 실제로 일어난 변경의 diff와 영향 라벨"], [],
               ["DATA-03 테스트셋은 사람이 직접 만든 시나리오만 쓰고, 라벨은 시나리오 작성자가 아닌 2명이 따로 붙인다(DATA-04)."],
               [f"이 파일의 변경 {len(log)}건과 영향 라벨은 LLM이 만든 것이라 라벨 가이드(DATA-02) 경계 사례 예시나 학습용(DATA-06, 사람 검수 후)으로만 쓴다."],
-              [f"변경 {len(log)}건은 1_문서세트/{P.FOLDER}의 v2 이상·승인대기·반려 파일과 문서이력.xlsx에 대응한다."], [],
+              [f"변경 {len(log)}건은 같은 폴더의 v2 이상·승인대기·반려 파일과 문서이력.xlsx에 대응한다. 파싱·diff 조정 때 정답으로 쓴다."],
+              ["학습용 가상 변경은 3_변경시나리오/ 의 변경시나리오_라벨.xlsx에 따로 있다."], [],
               ["시트", "내용"], ["변경 상세(diff)", "변경마다 기준 버전 대비 바뀐 칸(이전 값 → 이후 값)"],
               ["영향 팀 라벨", "변경마다 팀별 영향 있음 / 영향 없음(소유 팀은 판정 없이 항상 알림)"],
               ["반복값 위치(HEAD)", "같은 값이 나오는 문서·위치 — 새 변경 시나리오를 만들 때 영향 범위 근거"]]:
@@ -926,8 +1105,7 @@ def write_truth(P, out, heads, log, diffs, found_head):
              ["항목", "값", "문서", "버전", "위치"],
              [(w, v, P.DOCS[k]["name"], f"v{ver}", loc) for w, vals in found_head.items() for v, hits in vals.items() for k, ver, loc in hits],
              (18, 10, 26, 6, 70))
-    SCN_DIR.mkdir(exist_ok=True)
-    wb.save(SCN_DIR / f"{P.FOLDER}_변경예시_영향라벨.xlsx")
+    wb.save(out / "변경이력_정답.xlsx")
 
 
 def head_data(P):
@@ -938,12 +1116,39 @@ def head_data(P):
     return d
 
 
-def train_rows(P):
-    """학습용 시나리오 → (시나리오 행, 라벨 행). 소유 팀은 판정 대상이 아니라 쌍에서 뺀다."""
+def train_docs(P, heads, hist):
+    """시나리오마다 HEAD에 변경 1건만 적용한 제출본 파일 생성 → {시나리오 ID: (파일, 기준 버전, diff 목록)}. 시나리오끼리 독립."""
+    out = SCN_DIR / f"{P.FOLDER}_시나리오문서"
+    out.mkdir(parents=True, exist_ok=True)
+    for f in out.iterdir():
+        f.unlink()
+    hd, res = head_data(P), {}
+    for n, (doc, _kind, key, loc, before, after, why, _labels, *ops) in enumerate(TRAIN[P.CODE], 1):
+        sid, s = f"TR-{P.CODE}-{n:03d}", P.DOCS[doc]
+        nd = copy.deepcopy(hd)
+        if ops:
+            apply_ops(nd, ops[0])
+        else:
+            iid = loc if any(x[0] == loc for x in nd[key]) else None  # 블록 문서는 문서 전체에서 치환
+            apply_ops(nd, [("rep", key, iid, before, after)])
+        kind, body = MODELS[s["model"]](P, nd, s)
+        dl = diff(kind, heads[doc][2], body)
+        assert dl, f"{sid} 문서에 변경이 안 생김"
+        ver, apv = heads[doc][0], approver_of(P, s["team"], s["author"])
+        path = out / f"{sid}_{fname(s, kind)}"
+        h = (f"v{ver + 1}", P.ASOF, why, pname(s["author"]), pname(apv))
+        RENDER[s.get("fmt", kind)](path, meta_of(P, s, f"v{ver + 1}", "제출본(학습용 시나리오)", hist[doc] + [h], apv), body)
+        res[sid] = (path, ver, dl)
+    return res
+
+
+def train_rows(P, docs):
+    """학습용 시나리오 → (시나리오 행, 라벨 행, diff 행). 소유 팀은 판정 대상이 아니라 쌍에서 뺀다."""
     tn = team_name(P)
-    scn, lab = [], []
-    for n, (doc, kind, _key, loc, before, after, why, labels) in enumerate(TRAIN[P.CODE], 1):
+    scn, lab, dif = [], [], []
+    for n, (doc, kind, _key, loc, before, after, why, labels, *_ops) in enumerate(TRAIN[P.CODE], 1):
         sid, owner = f"TR-{P.CODE}-{n:03d}", P.DOCS[doc]["team"]
+        path, ver, dl = docs[sid]
         given = {t: (f"영향 {j}", r) for t, j, r in labels}
         hit = 0
         for code, name, *_ in teams(P):
@@ -952,27 +1157,33 @@ def train_rows(P):
             j, r = given.get(code, ("영향 없음", ""))
             hit += j == "영향 있음"
             lab.append((sid, P.DOCS[doc]["name"], tn[owner], name, j, "Y" if r.startswith("경계") else "", r, "", ""))
-        scn.append((sid, P.DOCS[doc]["name"], tn[owner], kind, loc, before or "(없음)", after or "(삭제)", why, hit))
-    return scn, lab
+        scn.append((sid, P.DOCS[doc]["name"], tn[owner], kind, loc, before or "(없음)", after or "(삭제)", why, hit,
+                    f"v{ver}", path.relative_to(SCN_DIR).as_posix()))
+        dif += [(sid, P.DOCS[doc]["name"], *x) for x in dl]
+    return scn, lab, dif
 
 
-def write_train(P):
-    scn, lab = train_rows(P)
+def write_train(P, heads, hist):
+    scn, lab, dif = train_rows(P, train_docs(P, heads, hist))
     wb = Workbook()
     ws = wb.active
     ws.title = "안내"
-    rules = [ln.strip() for ln in train_a.__doc__.split("라벨 기준")[1].splitlines()[1:] if ln.strip()]
-    for r in [["학습용 변경 시나리오·영향 라벨 — LLM 초안, 사람 검수 전 (DATA-06)"], [],
+    rules = [ln.strip() for ln in TRAIN_DOC[P.CODE].split("라벨 기준")[1].splitlines()[1:] if ln.strip()]
+    for r in [["변경 시나리오와 정답(diff·영향 라벨) — 학습·조정용, LLM 초안, 사람 검수 전 (DATA-06)"], [],
               ["테스트셋(DATA-03)이 아니다. 검수자가 '검수 결과' 칸에 확인·수정을 적은 뒤 학습·프롬프트 조정에 쓴다."],
-              ["시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 변경 1건이다. 문서 파일(v2·v3)은 만들지 않는다."],
+              [f"시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 변경 1건이다. 제출본 파일은 {P.FOLDER}_시나리오문서/ 에 있다."],
+              ["시험 방법: 1_문서세트의 HEAD를 올린 뒤, 시나리오 파일을 '기준 버전' 열의 버전을 고친 제출본으로 넣는다. 승인하지 말고 다음 시나리오로 넘어간다."],
+              ["채점: 파이프라인 diff ↔ '변경 상세(diff)' 시트, 영향 판정 ↔ '영향 라벨' 시트."],
               ["소유 팀은 항상 알림이라 판정 쌍에서 뺐다. '경계'가 Y인 쌍은 라벨 가이드(DATA-02) 경계 사례 후보다."], [],
               ["라벨 기준"]] + [[x] for x in rules]:
         ws.append(r)
     ws["A1"].font = Font(name=FONT, bold=True, size=14)
     ws.column_dimensions["A"].width = 120
-    xl_sheet(wb, "시나리오", f"{P.PROJECT} — 학습용 변경 시나리오 {len(scn)}건 (HEAD 기준, 서로 독립)",
-             ["시나리오 ID", "문서", "소유 팀", "유형", "위치", "이전", "이후", "변경 사유", "영향 있음 팀 수"], scn,
-             (11, 22, 18, 9, 14, 40, 40, 30, 8))
+    xl_sheet(wb, "시나리오", f"{P.PROJECT} — 변경 시나리오 {len(scn)}건 (HEAD 기준, 서로 독립)",
+             ["시나리오 ID", "문서", "소유 팀", "유형", "위치", "이전", "이후", "변경 사유", "영향 있음 팀 수", "기준 버전", "제출본 파일"], scn,
+             (11, 22, 18, 9, 14, 40, 40, 30, 8, 8, 50))
+    xl_sheet(wb, "변경 상세(diff)", "변경 상세 — 기준 버전(HEAD) 대비 셀 단위 차이 (파이프라인 diff 정답)",
+             ["시나리오 ID", "문서", "구분", "위치", "항목", "이전 값", "이후 값"], dif, (11, 22, 6, 50, 14, 50, 50))
     xl_sheet(wb, "영향 라벨", "변경 × 팀 영향 라벨 (소유 팀 제외) — LLM 초안, 검수 전",
              ["시나리오 ID", "문서", "소유 팀", "팀", "판정", "경계", "근거", "검수자", "검수 결과"], lab,
              (11, 22, 18, 20, 10, 5, 70, 8, 20))
@@ -985,9 +1196,8 @@ def write_train(P):
               ("시나리오", "전체", len(scn)), ("시나리오", "전 팀 영향 없음", sum(r[8] == 0 for r in scn))] +
              [("유형", k, sum(r[3] == k for r in scn)) for k in kinds] +
              [("소유 팀", o, sum(r[2] == o for r in scn)) for o in owners], (10, 22, 8))
-    SCN_DIR.mkdir(exist_ok=True)
-    wb.save(SCN_DIR / f"{P.FOLDER}_학습용_변경시나리오.xlsx")
-    return len(scn), len(lab), pos
+    wb.save(SCN_DIR / f"{P.FOLDER}_변경시나리오_라벨.xlsx")
+    return len(scn), len(lab), pos, len(dif)
 
 
 def write_overview(P, out, heads, log, found_head):
@@ -996,7 +1206,7 @@ def write_overview(P, out, heads, log, found_head):
          f"> DATA-01 가상 프로젝트 문서 세트(데이터셋 개정 {P.FOLDER[:8]}). 실존 회사·인물과 무관한 가상 데이터입니다.",
          "> 폴더명의 날짜는 데이터셋 개정일, 안쪽 v1·v2·v3는 문서 버전입니다.",
          "> 시스템(HEAD·검색·챗봇)에 올리는 것은 v1·v2… 버전 폴더의 문서뿐입니다. 승인대기·반려는 제출본, `문서이력.xlsx`는 이력 기록이며,",
-         f"> 질문셋은 `2_질문셋/`, 변경 예시·영향 라벨은 `3_변경시나리오/`에 따로 있습니다.", "",
+         f"> 이 폴더 변경의 정답(diff·영향 라벨)은 `변경이력_정답.xlsx`, 질문셋은 `2_질문셋/`, 학습용 변경 시나리오는 `3_변경시나리오/`에 있습니다.", "",
          "## 1. 프로젝트", "", "| 항목 | 내용 |", "|---|---|"] + [f"| {k} | {v} |" for k, v in P.OVERVIEW] + [
          f"| 수행사 | {company.COMPANY} |", "",
          "## 2. 조직과 역할", "",
@@ -1033,14 +1243,15 @@ def write_overview(P, out, heads, log, found_head):
           f"  v2/ ~ v{top}/   승인된 변경으로 생긴 그 버전의 문서만 (문서별 HEAD = 가장 높은 버전 폴더)",
           "  승인대기/  승인 담당자가 아직 처리하지 않은 제출본 (HEAD 아님, 승인 화면 비교용)",
           "  반려/      반려된 제출본 (HEAD 아님, 반려 사유는 문서이력.xlsx의 '변경 요청' 시트)",
-          "  문서이력.xlsx  문서별 HEAD 현황 + 변경 요청 이력(승인·반려·대기)", "```", "",
+          "  문서이력.xlsx  문서별 HEAD 현황 + 변경 요청 이력(승인·반려·대기)",
+          "  변경이력_정답.xlsx  위 변경들의 diff 정답·영향 팀 라벨·반복값 위치", "```", "",
           "## 7. 변경 요청 요약", "", "| 변경 ID | 문서 | 버전 | 상태 | 작성자 → 승인 담당 | 승인 구분 | 처리일 | 요약 |", "|---|---|---|---|---|---|---|---|"]
     for c, bv, nv, _, apv in log:
         s = P.DOCS[c["doc"]]
         L.append(f"| {c['id']} | {s['name']} | v{bv} → v{nv} | {c['status']} | {pname(c['author'])} → {pname(apv)} | "
                  f"{apv_kind(P, s['team'], c['author'], apv)} | {c['done'] or '-'} | {c['summary']} |")
     L += ["", "## 8. 반복되는 값 (현재 HEAD, 정규식 자동 검출)", "",
-          "⚠️는 문서마다 값이 다르다는 뜻입니다(변경이 일부 문서에만 반영된 상태 등). 위치 전체는 `3_변경시나리오/` 엑셀의 '반복값 위치(HEAD)' 시트에 있습니다.", "",
+          "⚠️는 문서마다 값이 다르다는 뜻입니다(변경이 일부 문서에만 반영된 상태 등). 위치 전체는 `변경이력_정답.xlsx`의 '반복값 위치(HEAD)' 시트에 있습니다.", "",
           "| 항목 | 값 | 나오는 문서 |", "|---|---|---|"]
     for w, vals in found_head.items():
         for v, hits in vals.items():
@@ -1068,29 +1279,29 @@ def write_company():
     wb.save(DOC_DIR / "회사_인원풀.xlsx")
 
 
-def write_questions():
-    by_code = {P.CODE: P for P in PROJECTS}
+def write_questions(P):
+    """프로젝트별 질문셋. '미지정'(프로젝트가 애매한 질문)은 모든 프로젝트 파일에 넣고, 질문자 정보는 그 프로젝트 배치로 푼다."""
+    qs = [q for q in questions.QUESTIONS if q[0] in (P.CODE, "미지정")]
     wb = Workbook()
     wb.remove(wb.active)
     rows = []
-    for n, (pc, q, intent, kind, asker, refs, note) in enumerate(questions.QUESTIONS, 1):
-        P = by_code.get(pc, PROJECTS[0])
+    for n, (pc, q, intent, kind, asker, refs, note) in enumerate(qs, 1):
         code, role = roster(P).get(asker, ("-", "프로젝트 밖 사내 구성원"))
         team = team_name(P).get(code) or ("발주처" if role == "게스트" else "소속 팀 없음")
         rows.append((f"Q{n:03d}", pc, q, intent, kind, asker, f"{pname(asker)} · {team} · {role}", refs, note))
-    xl_sheet(wb, "질문", f"사용자 질문 의도 평가셋 (DATA-07 초안, 데이터셋 개정 {PROJECTS[0].FOLDER[:8]})",
+    xl_sheet(wb, "질문", f"{P.PROJECT} — 사용자 질문 의도 평가셋 (DATA-07 초안, 데이터셋 개정 {P.FOLDER[:8]})",
              ["질문 ID", "프로젝트", "질문", "의도(정답, 복수는 ;)", "유형", "질문자 사번", "질문자(이름·팀·역할)", "관련 문서·ID", "정답·비고"],
              rows, (8, 8, 48, 22, 7, 9, 28, 24, 60))
     counts = {}
-    for q in questions.QUESTIONS:
+    for q in qs:
         for i in q[2].split(";"):
             counts[i] = counts.get(i, 0) + 1
-    kinds = {k: sum(q[3] == k for q in questions.QUESTIONS) for k in ("단일", "애매", "복합", "범위 밖")}
+    kinds = {k: sum(q[3] == k for q in qs) for k in ("단일", "애매", "복합", "범위 밖")}
     xl_sheet(wb, "분포", "라벨 분포", ["구분", "값", "건수"],
              [("의도", k, counts.get(k, 0)) for k in sorted(questions.INTENTS)] + [("유형", k, v) for k, v in kinds.items()] +
-             [("전체", "질문 수", len(questions.QUESTIONS))], (8, 14, 8))
+             [("전체", "질문 수", len(qs))], (8, 14, 8))
     Q_DIR.mkdir(exist_ok=True)
-    wb.save(Q_DIR / f"{PROJECTS[0].FOLDER}_질문셋.xlsx")
+    wb.save(Q_DIR / f"{P.FOLDER}_질문셋.xlsx")
 
 
 # ─────────────────────────── 검증 ───────────────────────────
@@ -1144,12 +1355,12 @@ def check(P):
         assert in_team(P, c["author"], team), f"{c['id']} 작성자는 소유 팀 소속"
         assert apv != c["author"] and apv in (ld[team], dp.get(team)), f"{c['id']} 승인자는 작성자가 아닌 팀장·대리 승인자"
         assert c["id"] in P.IMPACT
-    for q in (q for q in questions.QUESTIONS if q[0] == P.CODE):
+    for q in (q for q in questions.QUESTIONS if q[0] in (P.CODE, "미지정")):
         assert set(q[2].split(";")) <= questions.INTENTS, f"의도 라벨 오타: {q[1]}"
         assert q[4] in ro or q[4] in EMP, f"질문자 없음: {q[1]}"
     # 학습용 시나리오: 이전 문자열이 HEAD 해당 항목에 실제로 있는지, 팀·판정 값이 맞는지
     hd = head_data(P)
-    for n, (doc, kind, key, loc, before, after, why, labels) in enumerate(TRAIN.get(P.CODE, []), 1):
+    for n, (doc, kind, key, loc, before, after, why, labels, *_ops) in enumerate(TRAIN.get(P.CODE, []), 1):
         sid = f"TR-{P.CODE}-{n:03d}"
         assert doc in P.DOCS and key in hd and kind in ("값 변경", "항목 추가", "항목 삭제", "흐름 변경", "표현 수정"), sid
         if before:
@@ -1165,11 +1376,12 @@ def check(P):
 if __name__ == "__main__":
     for P in PROJECTS:
         check(P)
-        heads, log = build_project(P)
+        heads, log, hist = build_project(P)
         print(f"{P.FOLDER}: 문서 {len(P.DOCS)} · FR {len(P.FR)} · NFR {len(P.NFR)} · 프로세스 {len(P.PROC)} · SCR {len(P.SCR)} · IF {len(P.IF)} · "
               f"TB {len(P.TB)} · TC {len(P.TC)} · 변경 {len(log)} · HEAD " + ", ".join(f"{k}=v{v[0]}" for k, v in heads.items()))
         if P.CODE in TRAIN:
-            print("학습용 시나리오 %d건 · 쌍 %d · 영향 있음 %d" % write_train(P))
+            print("학습용 시나리오 %d건 · 쌍 %d · 영향 있음 %d · diff %d칸" % write_train(P, heads, hist))
     write_company()
-    write_questions()
+    for P in PROJECTS:
+        write_questions(P)
     print(f"질문 {len(questions.QUESTIONS)} -> {ROOT}")
