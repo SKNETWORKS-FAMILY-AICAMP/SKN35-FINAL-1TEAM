@@ -1,19 +1,21 @@
 import secrets
 
 import jwt
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import UnauthorizedError
+from app.core.exceptions import AppError, ConflictError, UnauthorizedError
 from app.core.security import (
     DUMMY_HASH,
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password,
     hash_token,
     verify_password,
 )
 from app.organizations import repository as user_repo
-from app.organizations.models import User
+from app.organizations.models import Company, User, UserLevel
 
 
 # 이메일·비밀번호로 사용자 인증, 실패 시 401
@@ -95,3 +97,31 @@ async def logout(db: AsyncSession, refresh_token: str | None) -> None:
         return
 
     await user_repo.update_refresh_token(db, user, None)
+
+
+# 초대 코드로 회사를 찾아 그 회사의 LIMITED 권한 직원으로 가입
+async def signup(
+    db: AsyncSession, invite_code: str, email: str, password: str, name: str
+) -> tuple[User, Company]:
+    company = await user_repo.get_company_by_invite_code(db, invite_code)
+
+    if company is None:
+        raise AppError("유요하지 않은 초대 코드입니다.")
+
+    if await user_repo.email_exists(db, email):
+        raise ConflictError("이미 가입된 이메일입니다.")
+
+    try:
+        user = await user_repo.create_user(
+            db,
+            company_id=company.company_id,
+            name=name,
+            email=email,
+            password_hash=hash_password(password),
+            user_type=UserLevel.LIMITED,
+        )
+
+    except IntegrityError:
+        raise ConflictError("이미 가입된 이메일입니다.") from None
+
+    return user, company
