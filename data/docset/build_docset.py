@@ -55,6 +55,7 @@ FONT = "맑은 고딕"
 PROJECTS = [project_a, project_b]
 TRAIN = {"A": train_a.SCENARIOS, "B": train_b.SCENARIOS}
 TRAIN_DOC = {"A": train_a.__doc__, "B": train_b.__doc__}  # 학습용 변경 시나리오(DATA-06 초안)
+KINDS = ("값 변경", "항목 추가", "항목 삭제", "흐름 변경", "표현 수정", "여러 곳 변경")  # 시나리오 유형. 여러 곳 변경 = 서로 다른 변경 여러 개를 한 번에 제출
 EMP = {e[0]: e for e in company.EMPLOYEES}
 EXT = {x[0]: x for p in PROJECTS for x in p.EXTERNAL}
 
@@ -632,7 +633,8 @@ def _wrap(s, size, width):
     return out
 
 
-def render_pdf(path, meta, blocks):
+def render_pdf(path, meta, blocks, shuffle=False):
+    """shuffle=True: 보이는 모습은 같고 페이지 안 텍스트 그리기 순서만 뒤집는다(추출 순서 흔들림 케이스, diff_cases.py)."""
     pages, ops = [], []
     y = PDF_H - PDF_M
 
@@ -688,6 +690,8 @@ def render_pdf(path, meta, blocks):
         else:
             table(b[1], b[2])
     pages.append(ops)
+    if shuffle:  # 칸 배경·테두리를 먼저, 텍스트는 역순으로 — 겹치는 영역이 없어 화면은 같다
+        pages = [[o for o in pg if not o.startswith("BT")] + [o for o in pg if o.startswith("BT")][::-1] for pg in pages]
 
     objs = [None, None]
 
@@ -965,25 +969,37 @@ def apply_ops(d, ops):
             return type(x)(p[0] for p in parts), sum(p[1] for p in parts)
         return x, 0
 
+    def find(key, iid):  # 항목 ID는 0번 열 값, (열, 값) 튜플이면 그 열로 찾는다(공통코드처럼 0번 열이 겹칠 때)
+        col, val = iid if isinstance(iid, tuple) else (0, iid)
+        return next(n for n, x in enumerate(d[key]) if x[col] == val)
+
     for op in ops:
         if op[0] == "rep":  # iid None = 그 데이터 전체(블록 문서 등)에서 치환
             _, key, iid, old, new = op
             if iid is None:
                 d[key], cnt = rep(d[key], old, new)
             else:
-                i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+                i = find(key, iid)
                 d[key][i], cnt = rep(d[key][i], old, new)
             assert cnt, f"치환 대상 없음: {iid} '{old}'"
         elif op[0] == "set":  # ("set", 데이터, 항목 ID, 열 인덱스, 값)
             _, key, iid, col, val = op
-            i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+            i = find(key, iid)
             d[key][i] = d[key][i][:col] + (val,) + d[key][i][col + 1:]
         elif op[0] == "add":  # ("add", 데이터, 행)
             d[op[1]].append(op[2])
+        elif op[0] == "del":  # ("del", 데이터, 항목 ID) — 행 삭제
+            del d[op[1]][find(op[1], op[2])]
         elif op[0] == "push":  # ("push", 데이터, 항목 ID, 열 인덱스, 값) — 항목 안 목록(화면 요소, 응답 항목 등)에 추가
             _, key, iid, col, val = op
-            i = next(n for n, x in enumerate(d[key]) if x[0] == iid)
+            i = find(key, iid)
             d[key][i] = d[key][i][:col] + (list(d[key][i][col]) + [val],) + d[key][i][col + 1:]
+        elif op[0] == "pull":  # ("pull", 데이터, 항목 ID, 열 인덱스, 이름) — 항목 안 목록에서 이름이 같은 요소 삭제
+            _, key, iid, col, name = op
+            i = find(key, iid)
+            kept = [v for v in d[key][i][col] if v[0] != name]
+            assert len(kept) < len(d[key][i][col]), f"삭제 대상 없음: {iid} '{name}'"
+            d[key][i] = d[key][i][:col] + (kept,) + d[key][i][col + 1:]
         else:
             next(t for t in d["TB"] if t[0] == op[1])[3].append(op[2])
 
@@ -1171,7 +1187,8 @@ def write_train(P, heads, hist):
     rules = [ln.strip() for ln in TRAIN_DOC[P.CODE].split("라벨 기준")[1].splitlines()[1:] if ln.strip()]
     for r in [["변경 시나리오와 정답(diff·영향 라벨) — 학습·조정용, LLM 초안, 사람 검수 전 (DATA-06)"], [],
               ["테스트셋(DATA-03)이 아니다. 검수자가 '검수 결과' 칸에 확인·수정을 적은 뒤 학습·프롬프트 조정에 쓴다."],
-              [f"시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 변경 1건이다. 제출본 파일은 {P.FOLDER}_시나리오문서/ 에 있다."],
+              [f"시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 제출 1건이다. 제출본 파일은 {P.FOLDER}_시나리오문서/ 에 있다."],
+              ["유형 '여러 곳 변경'은 서로 관계없는 변경 여러 개를 한 번에 제출한 경우다(위치·이전·이후는 ①②로 나눠 적음). 영향 라벨은 모든 변경을 합친 기준이다."],
               ["시험 방법: 1_문서세트의 HEAD를 올린 뒤, 시나리오 파일을 '기준 버전' 열의 버전을 고친 제출본으로 넣는다. 승인하지 말고 다음 시나리오로 넘어간다."],
               ["채점: 파이프라인 diff ↔ '변경 상세(diff)' 시트, 영향 판정 ↔ '영향 라벨' 시트."],
               ["소유 팀은 항상 알림이라 판정 쌍에서 뺐다. '경계'가 Y인 쌍은 라벨 가이드(DATA-02) 경계 사례 후보다."], [],
@@ -1360,10 +1377,11 @@ def check(P):
         assert q[4] in ro or q[4] in EMP, f"질문자 없음: {q[1]}"
     # 학습용 시나리오: 이전 문자열이 HEAD 해당 항목에 실제로 있는지, 팀·판정 값이 맞는지
     hd = head_data(P)
-    for n, (doc, kind, key, loc, before, after, why, labels, *_ops) in enumerate(TRAIN.get(P.CODE, []), 1):
+    for n, (doc, kind, key, loc, before, after, why, labels, *ops) in enumerate(TRAIN.get(P.CODE, []), 1):
         sid = f"TR-{P.CODE}-{n:03d}"
-        assert doc in P.DOCS and key in hd and kind in ("값 변경", "항목 추가", "항목 삭제", "흐름 변경", "표현 수정"), sid
-        if before:
+        assert doc in P.DOCS and key in hd and kind in KINDS, sid
+        assert kind != "여러 곳 변경" or (ops and len(ops[0]) >= 2), f"{sid}: 여러 곳 변경은 ops 2개 이상"
+        if before and not ops:  # ops가 있으면 ops가 대상 존재를 검사한다(rep·pull assert)
             items = [x for x in hd[key] if x[0] == loc] or hd[key]  # 블록 문서(ARCH 등)는 문서 전체에서 찾는다
             assert any(before in str(x) for x in items), f"{sid}: HEAD {loc}에 '{before}' 없음"
         assert before or after, sid
@@ -1374,9 +1392,14 @@ def check(P):
 
 
 if __name__ == "__main__":
+    import sys
+
+    import diff_cases
+    built = {}
     for P in PROJECTS:
         check(P)
         heads, log, hist = build_project(P)
+        built[P.CODE] = (P, heads, hist)
         print(f"{P.FOLDER}: 문서 {len(P.DOCS)} · FR {len(P.FR)} · NFR {len(P.NFR)} · 프로세스 {len(P.PROC)} · SCR {len(P.SCR)} · IF {len(P.IF)} · "
               f"TB {len(P.TB)} · TC {len(P.TC)} · 변경 {len(log)} · HEAD " + ", ".join(f"{k}=v{v[0]}" for k, v in heads.items()))
         if P.CODE in TRAIN:
@@ -1385,3 +1408,4 @@ if __name__ == "__main__":
     for P in PROJECTS:
         write_questions(P)
     print(f"질문 {len(questions.QUESTIONS)} -> {ROOT}")
+    print("diff 노이즈·경계 케이스 %d쌍" % diff_cases.build(sys.modules[__name__], built))
