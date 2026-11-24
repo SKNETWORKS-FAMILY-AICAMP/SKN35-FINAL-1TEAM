@@ -73,6 +73,49 @@ class SignupResponse(BaseModel):
     company_name: str | None
 
 
+# 회사 첫 등록 인증번호 발송 api request
+class CompanyVerificationRequest(BaseModel):
+    company_name: str = Field(min_length=1, max_length=50)
+    email: EmailStr
+
+    @field_validator("company_name")
+    @classmethod
+    def strip_company_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("회사 이름을 입력해 주세요.")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
+
+# 회사 등록 api request: 메일 인증을 마친 사람이 회사와 ADMIN 계정을 만듦
+class CompanyRegisterRequest(BaseModel):
+    verification_token: str
+    name: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("이름을 입력해주세요.")
+        return v
+
+
+# 회사 등록 api response
+class CompanyRegisterResponse(BaseModel):
+    company_id: int
+    company_name: str
+    user_id: int
+    email: str
+    name: str
+
+
 # 로그인 사용자 정보 응답
 class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

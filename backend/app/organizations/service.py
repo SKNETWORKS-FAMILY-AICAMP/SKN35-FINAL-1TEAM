@@ -98,3 +98,13 @@ async def create_department(
         raise ConflictError("이미 존재하는 부서입니다.")
 
     return await org_repo.create_department(db, company.company_id, name, description)
+
+
+# 내 회사의 부서 목록 조회
+async def get_company_departments(
+    db: AsyncSession, current_user: User
+) -> list[Department]:
+    if current_user.company_id is None:
+        raise NotFoundError("소속 회사를 찾을 수 없습니다.")
+
+    return await org_repo.get_company_departments(db, current_user.company_id)

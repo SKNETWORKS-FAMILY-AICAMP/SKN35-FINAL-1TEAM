@@ -4,6 +4,9 @@ from fastapi import APIRouter, Cookie, Response, status
 
 from app.auth import service
 from app.auth.schemas import (
+    CompanyRegisterRequest,
+    CompanyRegisterResponse,
+    CompanyVerificationRequest,
     EmailVerificationConfirmRequest,
     EmailVerificationConfirmResponse,
     EmailVerificationRequest,
@@ -14,6 +17,7 @@ from app.auth.schemas import (
 )
 from app.core.config import settings
 from app.db.session import SessionDep
+from app.organizations import service as org_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,6 +39,12 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         samesite="lax",
         path=REFRESH_COOKIE_PATH,
     )
+
+
+# 회사 등록 인증번호 발송: 회사명과 회사 메일을 받아 전송
+@router.post("/company-email-verifications", status_code=status.HTTP_204_NO_CONTENT)
+async def send_company_verification(body: CompanyVerificationRequest, db: SessionDep):
+    await org_service.send_company_verification(db, body.company_name, body.email)
 
 
 # 직원 가입 인증번호 발송: 메일 도메인으로 등록된 회사를 확인한 뒤 전송
@@ -67,6 +77,25 @@ async def signup(body: SignupRequest, db: SessionDep):
         email=user.email,
         name=user.name,
         company_name=company.name,
+    )
+
+
+# 회사 등록 회원가입: 메일 인증을 마친 사람을 ADMIN으로 회사와 계정 생성
+@router.post(
+    "/company-signup",
+    response_model=CompanyRegisterResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def company_signup(body: CompanyRegisterRequest, db: SessionDep):
+    company, user = await org_service.register_company(
+        db, body.verification_token, body.name, body.password
+    )
+    return CompanyRegisterResponse(
+        company_id=company.company_id,
+        company_name=company.name,
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
     )
 
 
