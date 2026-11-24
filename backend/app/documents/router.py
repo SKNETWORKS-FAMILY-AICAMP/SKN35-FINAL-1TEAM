@@ -1,31 +1,35 @@
 from fastapi import APIRouter, status
+from typing import Annotated
+from fastapi import APIRouter, File, Form, UploadFile, Depends
+from fastapi.responses import FileResponse
 
 from app.db.session import SessionDep
 from app.documents import service
-from app.organizations.schemas import CompanyRegisterRequest, CompanyRegisterResponse
+from app.documents.schemas import DocumentUploadRequest, DocumentUploadResponse, DocumentDownloadRequest
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-
-# 회사 등록: 사업자번호 검증 후 회사 + ADMIN 계정 생성, 계정 정보는 이 응답에서만 제공
+# 파일 업로드
 @router.post(
-    "",
-    response_model=CompanyRegisterResponse,
-    status_code=status.HTTP_201_CREATED,
+    "/upload-document",
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED
 )
-async def register_company(body: CompanyRegisterRequest, db: SessionDep):
-    (
-        company_id,
-        invite_code,
-        admin_email,
-        admin_password,
-    ) = await service.register_company(
-        db, body.name, body.company_code, body.representative_name, body.start_date
-    )
-    return CompanyRegisterResponse(
-        company_id=company_id,
-        name=body.name,
-        invite_code=invite_code,
-        admin_email=admin_email,
-        admin_password=admin_password,
-    )
+async def upload_document(db: SessionDep, request: DocumentUploadRequest = Depends(DocumentUploadRequest.as_form)):
+    file = request.file
+    user_id = request.user_id
+    project_id = request.project_id
+
+    result = await service.upload_document(db, file, user_id, project_id)
+
+    return result
+
+# 파일 다운로드 : 승인 대기 파일
+@router.get(
+    "/download-document",
+    response_class=FileResponse,
+    status_code=status.HTTP_201_CREATED
+)
+async def download_document(request: DocumentDownloadRequest = Depends()):
+    file_name = request.filename
+    return await service.download_document(file_name)

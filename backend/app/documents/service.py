@@ -1,5 +1,11 @@
-import secrets
+import anyio
+from pathlib import Path
 from datetime import date
+from uuid import uuid4
+from datetime import datetime
+
+from fastapi import HTTPException, status, UploadFile
+from fastapi.responses import FileResponse
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,83 +13,140 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AppError, ConflictError
 from app.core.security import hash_password
 
-# 사람이 읽고 입력하기 쉽게 헷갈리는 문자(0/O, 1/I/L) 제외
-CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-INVITE_CODE_LENGTH = 8
-ADMIN_ID_LENGTH = 8
-MAX_GENERATE_ATTEMPTS = 5
+from app.documents.schemas import DocumentUploadResponse
 
-BIZ_NO_WEIGHTS = (1, 3, 7, 1, 3, 7, 1, 3, 5)
+from app.documents import repository as doc_repo
 
+# backend 디렉터리
+BASE_DIR = Path(__file__).resolve().parents[2]
 
-# 사업자등록번호 마지막 자리(체크섬) 검증
-def is_valid_business_number(biz_no: str) -> bool:
-    """사업자등록번호 체크섬 검증. 형식만 확인하며 실제 영업 중인지는 알 수 없음."""
-    digits = [int(c) for c in biz_no]
-    total = sum(d * w for d, w in zip(digits[:9], BIZ_NO_WEIGHTS))
-    total += (digits[8] * 5) // 10
-    return (10 - total % 10) % 10 == digits[9]
+# 파일 저장 루트
+STORAGE_DIR = BASE_DIR / "storage" / "temp"
 
+# 파일 크기 제한: 50MB
+MAX_FILE_SIZE = 50 * 1024 * 1024
 
-# 헷갈리는 문자를 뺀 알파벳으로 랜덤 코드 생성
-def _random_code(length: int) -> str:
-    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(length))
+# 한 번에 읽을 크기: 1MB
+CHUNK_SIZE = 1024 * 1024
 
 
-# DB에 없는 8자리 초대 코드 생성 (겹치면 재시도)
-async def _generate_invite_code(db: AsyncSession) -> str:
-    for _ in range(MAX_GENERATE_ATTEMPTS):
-        code = _random_code(INVITE_CODE_LENGTH)
-        if not await org_repo.invite_code_exists(db, code):
-            return code
-    raise AppError("초대 코드 생성에 실패했습니다. 다시 시도해 주세요.")
+async def upload_document(db: AsyncSession, file: UploadFile, user_id: int, project_id: int):
 
+    # 1. 원본 파일명 확인
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="파일명이 존재하지 않습니다.",
+        )
 
-# DB에 없는 관리자 로그인용 이메일 생성 (겹치면 재시도)
-async def _generate_admin_email(db: AsyncSession, company_code: str) -> str:
-    # 로그인이 이메일 기준이라 관리자 ID도 이메일 형식으로 만듦
-    for _ in range(MAX_GENERATE_ATTEMPTS):
-        email = f"admin-{_random_code(ADMIN_ID_LENGTH).lower()}@c{company_code}.brain"
-        if not await org_repo.email_exists(db, email):
-            return email
-    raise AppError("관리자 계정 생성에 실패했습니다. 다시 시도해 주세요.")
+    # 2. 저장 경로 생성
+    upload_dir = STORAGE_DIR
 
-
-# 회사 등록 전체 흐름: 번호 검증 → 중복 확인 → 회사·ADMIN 계정 생성
-async def register_company(
-    db: AsyncSession,
-    name: str,
-    company_code: str,
-    representative_name: str,
-    start_date: date,
-) -> tuple[int, str, str, str]:
-    """회사 + ADMIN 계정 생성. (company_id, invite_code, admin_email, admin_password) 반환."""
-    if not is_valid_business_number(company_code):
-        raise AppError("유효하지 않은 사업자등록번호입니다.")
-
-    if await org_repo.company_code_exists(db, company_code):
-        raise ConflictError("이미 등록된 회사입니다.")
-
-    await nts.verify_business(
-        company_code, representative_name.strip(), start_date.strftime("%Y%m%d")
+    await anyio.to_thread.run_sync(
+        lambda: upload_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
     )
 
-    invite_code = await _generate_invite_code(db)
-    admin_email = await _generate_admin_email(db, company_code)
-    admin_password = secrets.token_urlsafe(12)
+    # 3. 고유한 파일명 생성
+    original_filename = file.filename
+
+    extension = Path(original_filename).suffix.lower()  # 확장자
+    file_name = original_filename.rstrip(extension)     # 확장자 이전까지의 파일 이름
+    
+    now = datetime.now()
+    current_time = now.strftime('%Y%m%dT%H%M%S')
+
+    stored_filename = f"{file_name}_{current_time}{extension}"
+    stored_file_path = (upload_dir / stored_filename).relative_to(BASE_DIR).as_posix()
+
+    # 4. 파일 저장
+    file_size = 0
 
     try:
-        company = await org_repo.create_company(db, company_code, name, invite_code)
-        await org_repo.create_user(
-            db,
-            company_id=company.company_id,
-            name=f"{name} 관리자",
-            email=admin_email,
-            password_hash=hash_password(admin_password),
-            user_type=UserLevel.ADMIN,
-        )
-    except IntegrityError:
-        # 같은 사업자번호로 동시에 두 요청이 들어온 경우 UNIQUE 제약에서 걸림
-        raise ConflictError("이미 등록된 회사입니다.") from None
+        async with await anyio.open_file(stored_file_path, "xb") as output:
+            while chunk := await file.read(CHUNK_SIZE):
+                file_size += len(chunk)
 
-    return company.company_id, invite_code, admin_email, admin_password
+                if file_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="파일 크기는 50MB를 초과할 수 없습니다.",
+                    )
+
+                await output.write(chunk)
+
+    except Exception:
+        # 저장 중 오류 발생 시 불완전한 파일 제거
+        await anyio.to_thread.run_sync(
+            stored_file_path.unlink,
+            missing_ok=True,
+        )
+        raise
+
+    finally:
+        await file.close()
+
+    # 5. DB 저장
+    try:
+        await doc_repo.create_wait_approval(db, user_id, project_id, now, stored_file_path.replace(stored_filename, ''), stored_filename)
+    except Exception as e:
+        raise e
+    
+    # 5. 결과 반환
+    return DocumentUploadResponse(
+        original_filename=original_filename,
+        stored_filename=stored_filename,
+        file_path=stored_file_path,
+        file_size=file_size,
+        user_id=user_id,
+        project_id=project_id,
+    )
+
+async def download_document(file_name: str):
+
+    # 1. 프로젝트 및 사용자별 저장 디렉터리
+    # upload_dir = (
+    #     STORAGE_DIR
+    #     / "projects"
+    #     / str(request.project_id)
+    #     / "users"
+    #     / str(request.user_id)
+    #     / "uploads"
+    # )
+
+    download_dir = STORAGE_DIR
+
+    # 2. 파일 경로 검증
+    # ../ 등을 이용한 다른 디렉터리 접근 방지
+    if (file_name in {".", ".."} or Path(file_name).name != file_name or "\\" in file_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="올바르지 않은 파일명입니다.",
+        )
+
+    # 3. 다운로드할 파일 경로
+    file_path = download_dir / file_name
+
+    # 심볼릭 링크를 통한 경로 이탈도 방지
+    if not file_path.resolve().is_relative_to(file_path.resolve()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="허용되지 않은 파일 경로입니다.",
+        )
+
+    # 4. 파일 존재 여부 확인
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="파일을 찾을 수 없습니다.",
+        )
+
+    # 5. 파일 다운로드 응답
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type="application/octet-stream",
+        content_disposition_type="attachment",
+    )
