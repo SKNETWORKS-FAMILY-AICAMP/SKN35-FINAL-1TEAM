@@ -48,4 +48,7 @@ Thumbs.db
 # ---------- AI 도구 ----------
 .serena/
 .claude/settings.local.json
+
+# CLAUDE.md는 각자 로컬에서만 사용 (Linux는 대소문자 구분하므로 둘 다 적음)
+CLAUDE.md
 claude.md
