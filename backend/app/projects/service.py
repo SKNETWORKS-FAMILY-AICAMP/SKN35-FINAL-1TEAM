@@ -11,7 +11,7 @@ from app.projects.schemas import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-PROJECT_CREATOR_LEVELS = {UserLevel.MANAGER}
+PROJECT_CREATOR_LEVELS = {UserLevel.MANAGER, UserLevel.ADMIN}
 PROJECT_MEMBER_MANAGER_ROLES = {ProjectMemberRole.OWNER, ProjectMemberRole.LEADER}
 
 
@@ -65,9 +65,6 @@ async def add_project_members(
         target.company_id != current_user.company_id for target in targets
     ):
         raise NotFoundError("사용자를 찾을 수 없습니다.")
-
-    if any(target.user_type == UserLevel.ADMIN for target in targets):
-        raise AppError("관리자 계정은 프로젝트 멤버로 추가할 수 없습니다.")
 
     if await project_repo.get_existing_member_user_ids(db, project_id, user_ids):
         raise ConflictError("이미 프로젝트 멤버인 사용자가 포함되어 있습니다.")

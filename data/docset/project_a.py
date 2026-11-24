@@ -7,6 +7,15 @@ CODE = "A"
 FOLDER = "26.11.19쇼핑몰A"  # 데이터셋 개정일 + 프로젝트. 개정하면 날짜를 바꾼다(문서 버전 v1·v2와 구분)
 PROJECT = "가나유통 온라인몰 차세대 구축"
 CLIENT = "(가상) 가나유통"
+ASOF = "2026-11-18"  # 문서 내용의 기준일
+PERM_ROLES = ["비회원", "회원", "관리자"]
+DB_DESC = "DBMS: MySQL 8.0, 스키마: vsm"
+PROC_INTRO = ("본 문서는 구 쇼핑몰의 현행(As-Is) 업무와 차세대 시스템의 개선(To-Be) 업무 흐름을 정의한다. 각 단계는 요구사항(FR)과 인터페이스(IF)에 연결되며, "
+              "업무 규칙(BR)과 예외 흐름(EX)은 화면·인터페이스·테스트케이스 설계의 기준이 된다.")
+ID_NOTES = [
+    "- 요구사항 FR-001~028 · NFR-001~008 → 업무 프로세스 P-01~07(BR·EX) → 화면 SCR-001~015 → 인터페이스 IF-001~038 → 테이블 TB_* → 테스트케이스 TC-001~038",
+    "- 인터페이스는 담당 팀으로 문서가 나뉜다: 회원·상품 API(05), 주문·결제 API·배치(06), 외부·레거시 연계(07)",
+]
 OVERVIEW = [
     ("프로젝트명", PROJECT),
     ("프로젝트 유형", "차세대 구축 + 레거시 연동 (구 쇼핑몰 교체, 기존 ERP·WMS 연계, 기존 회원 이행)"),
@@ -68,7 +77,7 @@ DOCS = {
     "ui": dict(no=4, name="UI가이드_퍼블리싱목록", team="DSN", author="E021", reviewer="E011", grade="사내 공개", date="2026-10-20", model="ui"),
     "ifmp": dict(no=5, name="인터페이스정의서_회원상품", team="MP", author="E031", reviewer="E052", grade="프로젝트 내부", date="2026-10-20", model="if"),
     "ifop": dict(no=6, name="인터페이스정의서_주문결제", team="OP", author="E041", reviewer="E052", grade="프로젝트 내부", date="2026-10-20", model="if"),
-    "eif": dict(no=7, name="연계정의서", team="CT", author="E053", reviewer="E040", grade="프로젝트 내부", date="2026-10-20", model="if"),
+    "eif": dict(no=7, name="연계정의서", team="CT", author="E053", reviewer="E040", grade="프로젝트 내부", date="2026-10-20", model="if", eif=True),
     "arch": dict(no=8, name="아키텍처_보안_권한설계서", team="CT", author="E051", reviewer="E030", grade="프로젝트 내부", date="2026-10-16", model="blocks", data="ARCH"),
     "tb": dict(no=9, name="테이블정의서", team="CT", author="E052", reviewer="E031", grade="프로젝트 내부", date="2026-10-20", model="tb"),
     "erd": dict(no=10, name="ERD", team="CT", author="E052", reviewer="E041", grade="프로젝트 내부", date="2026-10-20", model="erd"),

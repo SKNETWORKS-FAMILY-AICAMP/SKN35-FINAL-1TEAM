@@ -4,6 +4,9 @@ from fastapi import APIRouter, Cookie, Response, status
 
 from app.auth import service
 from app.auth.schemas import (
+    EmailVerificationConfirmRequest,
+    EmailVerificationConfirmResponse,
+    EmailVerificationRequest,
     LoginRequest,
     SignupRequest,
     SignupResponse,
@@ -34,13 +37,29 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     )
 
 
-# 회원가입: 초대코드로 회사를 찾아 LIMITED 권한 직원 계정 생성
+# 직원 가입 인증번호 발송: 메일 도메인으로 등록된 회사를 확인한 뒤 전송
+@router.post("/email-verifications", status_code=status.HTTP_204_NO_CONTENT)
+async def send_employee_verification(body: EmailVerificationRequest, db: SessionDep):
+    await service.send_employee_verification(db, body.email)
+
+
+# 인증번호 확인: 맞으면 회원가입 화면에 필요한 인증 토큰과 정보 반환
+@router.post(
+    "/email-verifications/confirm", response_model=EmailVerificationConfirmResponse
+)
+async def confirm_email_verification(
+    body: EmailVerificationConfirmRequest, db: SessionDep
+):
+    return await service.confirm_email_verification(db, body.email, body.code)
+
+
+# 직원 회원가입: 인증된 메일 도메인의 회사에 LIMITED 권한으로 계정 생성
 @router.post(
     "/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED
 )
 async def signup(body: SignupRequest, db: SessionDep):
     user, company = await service.signup(
-        db, body.invite_code, body.email, body.password, body.name
+        db, body.verification_token, body.password, body.name, body.dept_id
     )
 
     return SignupResponse(
