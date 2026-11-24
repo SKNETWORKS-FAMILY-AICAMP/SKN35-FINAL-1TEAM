@@ -1,6 +1,8 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.enums import VerificationPurpose
 from app.organizations.models import UserLevel
+from app.organizations.schemas import DepartmentResponse
 
 
 class LoginRequest(BaseModel):
@@ -18,17 +20,41 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class SignupRequest(BaseModel):
-    invite_code: str
+# 직원 가입 인증번호 발송 api request
+class EmailVerificationRequest(BaseModel):
     email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
+
+# 인증번호 확인 api request
+class EmailVerificationConfirmRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
+
+# 인증번호 확인 api response (purpose로 회원가입 화면을 구분, 직원 가입은 부서 목록 포함)
+class EmailVerificationConfirmResponse(BaseModel):
+    verification_token: str
+    email: str
+    purpose: VerificationPurpose
+    company_name: str | None
+    departments: list[DepartmentResponse]
+
+
+class SignupRequest(BaseModel):
+    verification_token: str
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(min_length=1, max_length=50)
-
-    @field_validator("invite_code")
-    @classmethod
-    # 초대코드는 대문자로만 생성되므로 소문자 및 공백으로 입력해도 여기서 맞춤
-    def normalize_invite_code(cls, v: str) -> str:
-        return v.strip().upper()
+    dept_id: int = Field(gt=0)
 
     @field_validator("name")
     @classmethod
@@ -38,11 +64,6 @@ class SignupRequest(BaseModel):
             raise ValueError("이름을 입력해주세요.")
 
         return v
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return v.lower()
 
 
 class SignupResponse(BaseModel):

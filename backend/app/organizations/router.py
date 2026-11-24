@@ -8,44 +8,43 @@ from app.organizations.schemas import (
     CompanyRegisterResponse,
     CompanyResponse,
     CompanyUsersResponse,
+    CompanyVerificationRequest,
+    DepartmentCreateRequest,
+    DepartmentResponse,
 )
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-# 회사 등록: 사업자번호 검증 후 회사 + ADMIN 계정 생성, 계정 정보는 이 응답에서만 제공
+# 회사 첫 등록 인증번호 발송: 회사명과 회사 메일을 받아 전송
+@router.post("/email-verifications", status_code=status.HTTP_204_NO_CONTENT)
+async def send_company_verification(body: CompanyVerificationRequest, db: SessionDep):
+    await service.send_company_verification(db, body.company_name, body.email)
+
+
+# 회사 등록: 메일 인증을 마친 사람을 ADMIN으로 회사 생성
 @router.post(
     "",
     response_model=CompanyRegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def register_company(body: CompanyRegisterRequest, db: SessionDep):
-    (
-        company_id,
-        invite_code,
-        admin_email,
-        admin_password,
-    ) = await service.register_company(
-        db, body.name, body.company_code, body.representative_name, body.start_date
+    company, user = await service.register_company(
+        db, body.verification_token, body.name, body.password
     )
     return CompanyRegisterResponse(
-        company_id=company_id,
-        name=body.name,
-        invite_code=invite_code,
-        admin_email=admin_email,
-        admin_password=admin_password,
+        company_id=company.company_id,
+        company_name=company.name,
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
     )
 
 
-# 내 회사 조회: 초대 코드는 ADMIN에게만 제공
+# 내 회사 조회
 @router.get("", response_model=CompanyResponse)
 async def get_my_company(db: SessionDep, current_user: CurrentUser):
-    company, invite_code = await service.get_my_company(db, current_user)
-    return CompanyResponse(
-        company_id=company.company_id,
-        name=company.name,
-        invite_code=invite_code,
-    )
+    return await service.get_my_company(db, current_user)
 
 
 # 내 회사 직원 목록 조회: 프로젝트 멤버 추가 시 대상 선택에 사용
@@ -53,3 +52,16 @@ async def get_my_company(db: SessionDep, current_user: CurrentUser):
 async def get_company_users(db: SessionDep, current_user: CurrentUser):
     users = await service.get_company_users(db, current_user)
     return {"users": users}
+
+
+@router.post(
+    "/departments",
+    response_model=DepartmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_department(
+    body: DepartmentCreateRequest, db: SessionDep, current_user: CurrentUser
+):
+    return await service.create_department(
+        db, current_user, body.name, body.description
+    )
