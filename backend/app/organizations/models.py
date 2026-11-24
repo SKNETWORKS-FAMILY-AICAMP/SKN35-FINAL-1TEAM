@@ -18,9 +18,8 @@ class Company(Base):
     __tablename__ = "company"
 
     company_id: Mapped[int] = mapped_column(primary_key=True)
-    company_code: Mapped[str] = mapped_column(String(10), unique=True)  # 사업자등록번호
     name: Mapped[str | None] = mapped_column(String(50))
-    invite_code: Mapped[str] = mapped_column(String(16), unique=True)
+    email_domain: Mapped[str] = mapped_column(String(255), unique=True)
 
 
 class Department(Base):
@@ -29,6 +28,7 @@ class Department(Base):
     dept_id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int | None] = mapped_column(ForeignKey("company.company_id"))
     name: Mapped[str | None] = mapped_column(String(50))
+    description: Mapped[str | None] = mapped_column(String(255))
 
 
 class User(Base):
