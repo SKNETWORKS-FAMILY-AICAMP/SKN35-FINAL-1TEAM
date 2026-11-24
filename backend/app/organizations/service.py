@@ -1,3 +1,4 @@
+from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,7 @@ from app.organizations.models import Company, Department, User, UserLevel
 
 # 회사 첫 등록: 도메인 중복을 확인하고 회사명과 함께 인증번호 발송
 async def send_company_verification(
-    db: AsyncSession, company_name: str, email: str
+    db: AsyncSession, redis: Redis, company_name: str, email: str
 ) -> None:
     email_domain = auth_service.get_email_domain(email)
 
@@ -19,7 +20,7 @@ async def send_company_verification(
         raise ConflictError("이미 등록된 회사입니다. 직원 회원가입을 이용해 주세요.")
 
     await auth_service.send_email_verification(
-        db, email, VerificationPurpose.COMPANY_REGISTER, company_name
+        db, redis, email, VerificationPurpose.COMPANY_REGISTER, company_name
     )
 
 

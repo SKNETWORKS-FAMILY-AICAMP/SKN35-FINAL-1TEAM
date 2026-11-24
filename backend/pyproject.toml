@@ -15,10 +15,12 @@ dependencies = [
     "pydantic-settings>=2.16.3",
     "pyjwt>=2.15.1",
     "sqlalchemy[asyncio]>=2.1.9",
+    "redis>=8.2.0",
 ]
 
 [dependency-groups]
 dev = [
+    "fakeredis[lua]>=2.41.0",
     "httpx>=0.28.1",
     "pytest>=9.2.0",
     "pytest-asyncio>=1.5.0",
