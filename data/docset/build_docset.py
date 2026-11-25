@@ -1106,13 +1106,12 @@ def write_truth(P, out, heads, log, diffs, found_head):
             if code == owner:  # 소유 팀도 자기 다른 문서 후속 작업이 있을 수 있음
                 j, why = given.get(code, ("", "변경 작성·승인"))
                 j = f"소유 팀({j})" if j else "소유 팀"
-            elif c["status"] != "승인":
-                j, why = "영향 없음", f"{c['status']} — HEAD 미반영, 알림 대상 아님"
             elif P.DOCS[c["doc"]]["grade"] == "팀 내부":
                 j, why = "영향 없음", "팀 내부 문서 — 알림은 소유 팀 안에서만, 다른 팀 판정 대상 아님"
             else:
                 j, why = given.get(code, ("영향 없음", ""))
-            notify = ("알림 없음(HEAD 미반영)" if c["status"] != "승인" else
+            # 판정은 제출 시점(HEAD vs 제출본)이라 상태와 무관, 알림만 승인 후 발송
+            notify = (f"알림 없음({c['status']} — 승인돼야 발송)" if c["status"] != "승인" else
                       "항상 알림(규칙, LLM 판정 대상 아님)" if code == owner else
                       "알림 없음(팀 내부 문서)" if P.DOCS[c["doc"]]["grade"] == "팀 내부" else "LLM 판정 결과에 따름")
             rows.append((c["id"], c["status"], name, j, notify, why))
@@ -1172,7 +1171,9 @@ def train_rows(P, docs):
                 continue
             j, r = given.get(code, ("영향 없음", ""))
             hit += j == "영향 있음"
-            lab.append((sid, P.DOCS[doc]["name"], tn[owner], name, j, "Y" if r.startswith("경계") else "", r, "", ""))
+            edge = r.startswith("경계")  # 경계 사례는 영향팀_경계사례집에서 사람 검수 완료
+            lab.append((sid, P.DOCS[doc]["name"], tn[owner], name, j, "Y" if edge else "", r, "",
+                        "경계사례집 최종 판정 반영(26.11.24)" if edge else ""))
         scn.append((sid, P.DOCS[doc]["name"], tn[owner], kind, loc, before or "(없음)", after or "(삭제)", why, hit,
                     f"v{ver}", path.relative_to(SCN_DIR).as_posix()))
         dif += [(sid, P.DOCS[doc]["name"], *x) for x in dl]
