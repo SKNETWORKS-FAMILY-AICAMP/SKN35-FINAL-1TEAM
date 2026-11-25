@@ -9,6 +9,10 @@ from app.projects.schemas import (
     ProjectMemberListResponse,
     ProjectMembersCreateRequest,
     ProjectMembersCreateResponse,
+    ProjectTeamCreateRequest,
+    ProjectTeamLeaderUpdateRequest,
+    ProjectTeamListResponse,
+    ProjectTeamResponse,
 )
 from fastapi import APIRouter, status
 
@@ -65,3 +69,44 @@ async def get_project_members(
 ):
     members = await service.get_project_members(db, current_user, project_id)
     return {"members": members}
+
+
+# 프로젝트 팀 생성: OWNER만 가능, 대표 팀장을 LEADER 멤버로 함께 등록
+@router.post(
+    "/{project_id}/teams",
+    response_model=ProjectTeamResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_team(
+    project_id: int,
+    body: ProjectTeamCreateRequest,
+    db: SessionDep,
+    current_user: CurrentUser,
+):
+    return await service.create_project_team(db, current_user, project_id, body)
+
+
+# 프로젝트 팀 목록 조회: 프로젝트 멤버·OWNER만 가능
+@router.get("/{project_id}/teams", response_model=ProjectTeamListResponse)
+async def get_project_teams(
+    project_id: int, db: SessionDep, current_user: CurrentUser
+):
+    teams = await service.get_project_teams(db, current_user, project_id)
+    return {"teams": teams}
+
+
+# 대표 팀장 변경: OWNER만 가능, 그 팀의 LEADER 중에서만 선택
+@router.patch(
+    "/{project_id}/teams/{project_team_id}/leader",
+    response_model=ProjectTeamResponse,
+)
+async def update_team_leader(
+    project_id: int,
+    project_team_id: int,
+    body: ProjectTeamLeaderUpdateRequest,
+    db: SessionDep,
+    current_user: CurrentUser,
+):
+    return await service.update_team_leader(
+        db, current_user, project_id, project_team_id, body.team_leader
+    )

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from app.core.enums import YN
 from app.projects.models import ProjectMemberRole, ProjectStatus
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_MEMBERS_PER_REQUEST = 50
 
@@ -32,9 +32,47 @@ class ProjectCreateResponse(BaseModel):
     created_at: datetime
 
 
+# 프로젝트 팀 생성 api request: 팀을 만들면서 대표 팀장을 LEADER로 등록
+class ProjectTeamCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    team_leader: int = Field(gt=0)
+    is_approval: YN = YN.N
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+
+        if not v:
+            raise ValueError("팀 이름을 입력해주세요.")
+
+        return v
+
+
+# 대표 팀장 변경 api request
+class ProjectTeamLeaderUpdateRequest(BaseModel):
+    team_leader: int = Field(gt=0)
+
+
+# 프로젝트 팀 1개 응답
+class ProjectTeamResponse(BaseModel):
+    project_team_id: int
+    project_id: int
+    name: str | None
+    team_leader: int | None
+    team_leader_name: str | None
+    member_count: int
+
+
+# 프로젝트 팀 목록 api response
+class ProjectTeamListResponse(BaseModel):
+    teams: list[ProjectTeamResponse]
+
+
 # 프로젝트 멤버 추가 대상 1명
 class ProjectMemberCreateItem(BaseModel):
     user_id: int = Field(gt=0)
+    project_team_id: int = Field(gt=0)
     role: ProjectMemberRole = ProjectMemberRole.MEMBER
     is_approval: YN = YN.N
 
@@ -44,6 +82,12 @@ class ProjectMemberCreateItem(BaseModel):
         if v == ProjectMemberRole.OWNER:
             raise ValueError("OWNER 권한은 부여할 수 없습니다.")
         return v
+
+    @model_validator(mode="after")
+    def approval_only_leader(self) -> "ProjectMemberCreateItem":
+        if self.is_approval == YN.Y and self.role != ProjectMemberRole.LEADER:
+            raise ValueError("승인권자는 LEADER만 지정할 수 있습니다.")
+        return self
 
 
 # 프로젝트 멤버 일괄 추가 api request
@@ -69,6 +113,7 @@ class ProjectMemberCreateResponse(BaseModel):
 
     project_member_id: int
     project_id: int
+    project_team_id: int
     user_id: int
     role: ProjectMemberRole
     is_approval: YN
@@ -102,11 +147,13 @@ class ProjectDetailResponse(BaseModel):
     updated_at: datetime
     my_role: ProjectMemberRole
     my_is_approval: YN
+    my_project_team_id: int | None
 
 
 # 프로젝트 멤버 목록의 멤버 1명 응답
 class ProjectMemberDetail(BaseModel):
     project_member_id: int
+    project_team_id: int
     user_id: int
     name: str
     email: str

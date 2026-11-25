@@ -3,7 +3,15 @@ from datetime import datetime
 
 from app.core.enums import YN
 from app.db.base import Base
-from sqlalchemy import DateTime, Enum, FetchedValue, ForeignKey, String, func
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    FetchedValue,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -25,6 +33,7 @@ class Project(Base):
     project_id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int | None] = mapped_column(ForeignKey("company.company_id"))
     name: Mapped[str] = mapped_column(String(100))
+    project_owner: Mapped[int | None] = mapped_column(ForeignKey("user.user_id"))
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus, name="project_status"),
         default=ProjectStatus.START,
@@ -40,11 +49,24 @@ class Project(Base):
     )
 
 
+class ProjectTeam(Base):
+    __tablename__ = "project_team"
+
+    project_team_id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("project.project_id"))
+    name: Mapped[str | None] = mapped_column(String(50))
+    team_leader: Mapped[int | None] = mapped_column(ForeignKey("user.user_id"))
+
+
 class ProjectMember(Base):
     __tablename__ = "project_member"
+    __table_args__ = (UniqueConstraint("project_id", "user_id"),)
 
     project_member_id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("project.project_id"))
+    project_team_id: Mapped[int] = mapped_column(
+        ForeignKey("project_team.project_team_id")
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     role: Mapped[ProjectMemberRole] = mapped_column(
         Enum(ProjectMemberRole, name="project_member_role"),
