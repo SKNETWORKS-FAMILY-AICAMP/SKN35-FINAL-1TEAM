@@ -1086,7 +1086,7 @@ def write_truth(P, out, heads, log, diffs, found_head):
     ws.title = "안내"
     for r in [["변경 이력 정답 — 이 폴더 문서(v2 이상·승인대기·반려)에 실제로 일어난 변경의 diff와 영향 라벨"], [],
               ["DATA-03 테스트셋은 사람이 직접 만든 시나리오만 쓰고, 라벨은 시나리오 작성자가 아닌 2명이 따로 붙인다(DATA-04)."],
-              [f"이 파일의 변경 {len(log)}건과 영향 라벨은 LLM이 만든 것이라 라벨 가이드(DATA-02) 경계 사례 예시나 학습용(DATA-06, 사람 검수 후)으로만 쓴다."],
+              [f"이 파일의 변경 {len(log)}건과 영향 라벨은 LLM 초안을 사람이 검수한 것이다(경계 사례는 영향팀_경계사례집 최종 판정, 26.11.24). 테스트셋이 아니므로 라벨 가이드(DATA-02) 예시나 학습·조정용(DATA-06)으로만 쓴다."],
               [f"변경 {len(log)}건은 같은 폴더의 v2 이상·승인대기·반려 파일과 문서이력.xlsx에 대응한다. 파싱·diff 조정 때 정답으로 쓴다."],
               ["학습용 가상 변경은 3_변경시나리오/ 의 변경시나리오_라벨.xlsx에 따로 있다."], [],
               ["시트", "내용"], ["변경 상세(diff)", "변경마다 기준 버전 대비 바뀐 칸(이전 값 → 이후 값)"],
@@ -1186,13 +1186,13 @@ def write_train(P, heads, hist):
     ws = wb.active
     ws.title = "안내"
     rules = [ln.strip() for ln in TRAIN_DOC[P.CODE].split("라벨 기준")[1].splitlines()[1:] if ln.strip()]
-    for r in [["변경 시나리오와 정답(diff·영향 라벨) — 학습·조정용, LLM 초안, 사람 검수 전 (DATA-06)"], [],
-              ["테스트셋(DATA-03)이 아니다. 검수자가 '검수 결과' 칸에 확인·수정을 적은 뒤 학습·프롬프트 조정에 쓴다."],
+    for r in [["변경 시나리오와 정답(diff·영향 라벨) — 학습·조정용, LLM 초안을 사람이 검수 (DATA-06, 26.11.24)"], [],
+              ["테스트셋(DATA-03)이 아니다. 학습·프롬프트 조정에만 쓰고, 여기서 나온 점수는 보고 수치로 쓰지 않는다. 경계 사례는 영향팀_경계사례집에서 사람이 최종 판정했고, 나머지 쌍은 사례집 원칙으로 전수 대조했다(2인 독립 라벨링 아님)."],
               [f"시나리오마다 현재 HEAD를 기준으로 서로 독립인 가상 제출 1건이다. 제출본 파일은 {P.FOLDER}_시나리오문서/ 에 있다."],
               ["유형 '여러 곳 변경'은 서로 관계없는 변경 여러 개를 한 번에 제출한 경우다(위치·이전·이후는 ①②로 나눠 적음). 영향 라벨은 모든 변경을 합친 기준이다."],
               ["시험 방법: 1_문서세트의 HEAD를 올린 뒤, 시나리오 파일을 '기준 버전' 열의 버전을 고친 제출본으로 넣는다. 승인하지 말고 다음 시나리오로 넘어간다."],
               ["채점: 파이프라인 diff ↔ '변경 상세(diff)' 시트, 영향 판정 ↔ '영향 라벨' 시트."],
-              ["소유 팀은 항상 알림이라 판정 쌍에서 뺐다. '경계'가 Y인 쌍은 라벨 가이드(DATA-02) 경계 사례 후보다."], [],
+              ["소유 팀은 항상 알림이라 판정 쌍에서 뺐다. '경계'가 Y인 쌍은 영향팀_경계사례집의 최종 판정을 반영한 경계 사례다."], [],
               ["라벨 기준"]] + [[x] for x in rules]:
         ws.append(r)
     ws["A1"].font = Font(name=FONT, bold=True, size=14)
@@ -1202,7 +1202,7 @@ def write_train(P, heads, hist):
              (11, 22, 18, 9, 14, 40, 40, 30, 8, 8, 50))
     xl_sheet(wb, "변경 상세(diff)", "변경 상세 — 기준 버전(HEAD) 대비 셀 단위 차이 (파이프라인 diff 정답)",
              ["시나리오 ID", "문서", "구분", "위치", "항목", "이전 값", "이후 값"], dif, (11, 22, 6, 50, 14, 50, 50))
-    xl_sheet(wb, "영향 라벨", "변경 × 팀 영향 라벨 (소유 팀 제외) — LLM 초안, 검수 전",
+    xl_sheet(wb, "영향 라벨", "변경 × 팀 영향 라벨 (소유 팀 제외) — 검수 완료(26.11.24)",
              ["시나리오 ID", "문서", "소유 팀", "팀", "판정", "경계", "근거", "검수자", "검수 결과"], lab,
              (11, 22, 18, 20, 10, 5, 70, 8, 20))
     pos = sum(r[4] == "영향 있음" for r in lab)
@@ -1279,21 +1279,60 @@ def write_overview(P, out, heads, log, found_head):
 
 
 def write_company():
+    """직원 × 프로젝트 배치를 한 시트에(부서는 회사 조직, 팀은 프로젝트마다 따로), 프로젝트별 팀 구성을 한 시트에."""
     wb = Workbook()
     wb.remove(wb.active)
-    assign = {}
-    rows2 = []
+    ros = {P.CODE: roster(P) for P in PROJECTS}
+    tns = {P.CODE: team_name(P) for P in PROJECTS}
+
+    # 1) 직원·프로젝트 배치: 2단 헤더(프로젝트 → 팀·역할)
+    ws = wb.create_sheet("직원·프로젝트 배치")
+    ws["A1"] = f"{company.COMPANY} 직원과 프로젝트 배치 (가상) — 부서는 회사 조직, 팀은 프로젝트마다 따로 꾸린다"
+    ws["A1"].font = Font(name=FONT, bold=True, size=13)
+    base = ["사번", "이름", "직급", "직무", "부서", "이메일"]
+    h1 = base + [x for P in PROJECTS for x in (f"{P.CODE} {P.PROJECT}", None)] + ["배치 수"]
+    h2 = [None] * len(base) + ["팀", "역할"] * len(PROJECTS) + [None]
+    ws.append([]); ws.append(h1); ws.append(h2)
+    for i, v in enumerate(h1, 1):
+        if i <= len(base) or i == len(h1):
+            ws.merge_cells(start_row=3, end_row=4, start_column=i, end_column=i)
+        elif v:
+            ws.merge_cells(start_row=3, end_row=3, start_column=i, end_column=i + 1)
+    for e in sorted(company.EMPLOYEES, key=lambda e: (e[4], e[0])):
+        row, n = list(e[:5]) + [f"{e[0].lower()}@{company.MAIL_DOMAIN}"], 0
+        for P in PROJECTS:
+            code, role = ros[P.CODE].get(e[0], (None, None))
+            row += [tns[P.CODE][code], role] if code else ["-", "-"]
+            n += bool(code)
+        ws.append(row + [n])
+    proj_fill = [PatternFill("solid", fgColor=c) for c in ("E2EFDA", "FCE4D6")]
+    for r in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in r:
+            c.border, c.alignment = BOX, WRAP
+            c.font = Font(name=FONT, size=10, bold=c.row <= 4 or c.value in ("팀장", "오너"))
+            k = (c.column - len(base) - 1) // 2
+            if c.row <= 4:
+                c.fill = HEAD_FILL
+            elif 0 <= k < len(PROJECTS) and c.value != "-":
+                c.fill = proj_fill[k]
+    for i, w in enumerate((7, 8, 6, 22, 18, 24) + (22, 14) * len(PROJECTS) + (7,), 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "C5"
+    ws.auto_filter.ref = f"A4:{get_column_letter(len(h1))}{ws.max_row}"
+
+    # 2) 프로젝트별 팀 구성: 팀 한 줄에 팀장·팀원·대리 승인자
+    def who(pid):
+        e = EMP[pid]
+        return f"{e[1]}({e[0]}, {e[4]})"
+    rows = []
     for P in PROJECTS:
-        tn = team_name(P)
-        for pid, (code, role) in roster(P).items():
-            assign.setdefault(pid, []).append(f"{P.CODE}:{role}")
-            rows2.append((P.CODE, P.PROJECT, pid, pname(pid), tn.get(code, "-"), role))
-    xl_sheet(wb, "직원 명단", f"{company.COMPANY} 직원 명단 (가상)", ["사번", "이름", "직급", "직무", "소속 본부", "이메일", "배치(프로젝트:역할)"],
-             [(e[0], e[1], e[2], e[3], e[4], f"{e[0].lower()}@{company.MAIL_DOMAIN}", ", ".join(assign.get(e[0], [])) or "미배치") for e in company.EMPLOYEES],
-             (7, 8, 6, 22, 18, 24, 18))
-    xl_sheet(wb, "프로젝트 배치", "프로젝트별 배치와 역할 (같은 사람이 프로젝트마다 다른 역할 가능)", ["프로젝트", "프로젝트명", "사번", "이름", "팀", "역할"],
-             sorted(rows2), (8, 28, 7, 8, 22, 8))
-    xl_sheet(wb, "외부 인원", "발주처 등 외부 인원", ["ID", "이름", "직급", "업무", "소속"], [x for P in PROJECTS for x in P.EXTERNAL], (6, 8, 6, 24, 12))
+        for code, name, ld, members, job in teams(P):
+            rows.append((P.CODE, name, who(ld) + (" — 오너" if ld == P.OWNER else ""), "\n".join(who(m) for m in members),
+                         EMP[deputy(P)[code]][1] if code in deputy(P) else "-", len(members) + 1, job))
+    xl_sheet(wb, "프로젝트별 팀 구성", "프로젝트별 팀 구성 (같은 사람이 프로젝트마다 다른 팀·역할 가능)",
+             ["프로젝트", "팀", "팀장", "팀원(사번, 부서)", "대리 승인자", "인원", "하는 일"], rows, (8, 22, 30, 34, 10, 6, 44))
+    xl_sheet(wb, "외부 인원", "발주처 등 외부 인원 (계정 유형 '게스트')", ["ID", "이름", "직급", "업무", "소속 회사", "프로젝트"],
+             [x + (P.CODE,) for P in PROJECTS for x in P.EXTERNAL], (6, 8, 6, 24, 12, 8))
     wb.save(DOC_DIR / "회사_인원풀.xlsx")
 
 
