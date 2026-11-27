@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, NavLink, useNavigate } from 'react-router'
 
 import { notificationQueries } from '../../api/notifications'
+import { PROJECT_CREATOR_LEVELS } from '../../api/organizations'
 import { formatDate, PROJECT_STATUS_LABEL } from '../../api/project'
 import { useCurrentUser, useLogout, useSelectProject } from '../../hooks/useAuth'
+import CreateProjectForm from '../CreateProjectForm'
 
 const WORKSPACE_MENU = [
   { to: '/dashboard', label: '대시보드', icon: 'ri-dashboard-line', end: true },
@@ -30,10 +33,19 @@ function Sidebar({ onNavigate }: SidebarProps) {
   const logout = useLogout()
   const selectProject = useSelectProject()
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const canCreateProject = PROJECT_CREATOR_LEVELS.includes(user.user_type)
 
   const { data: notifications = [] } = useQuery(notificationQueries.received())
 
   const unreadCount = notifications.filter((n) => n.unread).length
+
+  useEffect(() => {
+    if (!createOpen) return
+    const closeOnEscape = (e: KeyboardEvent) => e.key === 'Escape' && setCreateOpen(false)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [createOpen])
 
   return (
     <div className="flex h-full flex-col">
@@ -90,15 +102,20 @@ function Sidebar({ onNavigate }: SidebarProps) {
                 )}
               </button>
             ))}
-            <div className="mt-1 border-t border-background-700/80 pt-1">
-              <button
-                type="button"
-                onClick={() => setProjectMenuOpen(false)}
-                className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] text-foreground-400 transition hover:bg-background-700/70 hover:text-foreground-100"
-              >
-                <i className="ri-add-line text-[14.5px]" /> 새 프로젝트
-              </button>
-            </div>
+            {canCreateProject && (
+              <div className="mt-1 border-t border-background-700/80 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectMenuOpen(false)
+                    setCreateOpen(true)
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] text-foreground-400 transition hover:bg-background-700/70 hover:text-foreground-100"
+                >
+                  <i className="ri-add-line text-[14.5px]" /> 새 프로젝트
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -142,6 +159,20 @@ function Sidebar({ onNavigate }: SidebarProps) {
           Govern
         </p>
         <ul className="space-y-0.5">
+          <li>
+            <NavLink
+              to="/settings"
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[14.5px] transition ${isActive ? 'bg-primary-500/10 text-primary-200' : 'text-foreground-300 hover:bg-background-800/70 hover:text-foreground-100'}`
+              }
+            >
+              <span className="flex h-5 w-5 items-center justify-center">
+                <i className="ri-team-line text-[16px]" />
+              </span>
+              <span className="flex-1 whitespace-nowrap">조직 관리</span>
+            </NavLink>
+          </li>
           {GOVERN_MENU.map((item) => (
             <li key={item.label}>
               <button
@@ -182,6 +213,37 @@ function Sidebar({ onNavigate }: SidebarProps) {
           </button>
         </div>
       </div>
+
+      {/* 사이드바의 backdrop-blur 가 fixed 기준을 바꾸므로 body 에 띄운다 */}
+      {createOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-background-950/75 backdrop-blur-xs"
+              onClick={() => setCreateOpen(false)}
+            />
+            <div className="panel relative w-full max-w-[420px] p-6 shadow-panel">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="font-heading text-[18px] text-foreground-50">새 프로젝트</p>
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  aria-label="닫기"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm text-foreground-500 transition hover:bg-background-700/70 hover:text-foreground-100"
+                >
+                  <i className="ri-close-line text-[16px]" />
+                </button>
+              </div>
+              <CreateProjectForm
+                onCreated={() => {
+                  setCreateOpen(false)
+                  onNavigate()
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

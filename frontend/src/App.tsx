@@ -10,6 +10,7 @@ import LandingPage from './pages/landing/LandingPage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
 import NotificationsPage from './pages/NotificationsPage'
+import SettingsPage from './pages/settings/SettingsPage'
 import SubmitPage from './pages/submit/SubmitPage'
 
 const router = createBrowserRouter([
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: '/submit', element: <SubmitPage /> },
       { path: '/notifications', element: <NotificationsPage /> },
       { path: '/assistant', element: <AssistantPage /> },
+      { path: '/settings', element: <SettingsPage /> },
     ],
   },
   { path: '*', element: <NotFoundPage /> },

@@ -3,15 +3,9 @@ import { useNavigate } from 'react-router'
 
 import { authQueries, login, logout, type LoginRequest } from '../api/auth'
 import { tokenStorage } from '../api/client'
-import { projectQueries, type Project, type ProjectMemberRole } from '../api/project'
+import { PROJECT_ROLE_LABEL, projectQueries, type Project } from '../api/project'
 
 const PROJECT_KEY = 'currentProjectId'
-
-const ROLE_LABEL: Record<ProjectMemberRole, string> = {
-  OWNER: '오너',
-  LEADER: '팀장',
-  MEMBER: '팀원',
-}
 
 function pickProject(projects: Project[]) {
   const savedId = Number(localStorage.getItem(PROJECT_KEY))
@@ -63,7 +57,7 @@ export function useCurrentUser() {
     projects,
     teams,
     teamName: team?.name ?? '소속 팀 없음',
-    roleLabel: canApprove ? '승인권자' : ROLE_LABEL[project.my_role],
+    roleLabel: canApprove ? '승인권자' : PROJECT_ROLE_LABEL[project.my_role],
     // 화면 노출 기준. 실제 권한 판정은 백엔드가 한다
     can: {
       approve: canApprove,

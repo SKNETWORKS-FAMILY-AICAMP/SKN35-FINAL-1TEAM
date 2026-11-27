@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
 import { ApiError, request, tokenStorage } from './client'
-import { getCompanyUsers, type CompanyUser } from './organizations'
+import { getCompanyUsers, type CompanyUser, type Department } from './organizations'
 
 // backend/app/auth/schemas.py 의 LoginRequest, TokenResponse
 export interface LoginRequest {
@@ -23,6 +23,60 @@ export function login(body: LoginRequest) {
 
 export function logout() {
   return request<void>('/auth/logout', { method: 'POST' })
+}
+
+// backend/app/auth/schemas.py 의 가입 관련 요청·응답
+export type VerificationPurpose = 'COMPANY_REGISTER' | 'EMPLOYEE_SIGNUP'
+
+export interface EmailVerificationConfirmResponse {
+  verification_token: string
+  email: string
+  purpose: VerificationPurpose
+  company_name: string | null
+  // 직원 가입일 때만 채워진다
+  departments: Department[]
+}
+
+export interface SignupRequest {
+  verification_token: string
+  password: string
+  name: string
+  dept_id: number
+}
+
+export interface CompanyRegisterRequest {
+  verification_token: string
+  name: string
+  password: string
+}
+
+export function sendCompanyVerification(companyName: string, email: string) {
+  return request<void>('/auth/company-email-verifications', {
+    method: 'POST',
+    body: JSON.stringify({ company_name: companyName, email }),
+  })
+}
+
+export function sendEmployeeVerification(email: string) {
+  return request<void>('/auth/email-verifications', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function confirmEmailVerification(email: string, code: string) {
+  return request<EmailVerificationConfirmResponse>('/auth/email-verifications/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  })
+}
+
+export function signup(body: SignupRequest) {
+  return request<unknown>('/auth/signup', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function companySignup(body: CompanyRegisterRequest) {
+  return request<unknown>('/auth/company-signup', { method: 'POST', body: JSON.stringify(body) })
 }
 
 // access 토큰의 sub 가 user_id. 화면 표시용으로만 읽고 검증은 백엔드가 한다

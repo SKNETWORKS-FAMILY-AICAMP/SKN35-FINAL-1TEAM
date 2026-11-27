@@ -3,13 +3,30 @@ import { useLocation, useNavigate } from 'react-router'
 
 import { ApiError } from '../api/client'
 import { useLogin } from '../hooks/useAuth'
+import SignupForm, { type SignupKind } from './SignupForm'
 
-type AuthMode = 'login' | 'signup'
+type AuthMode = 'login' | SignupKind
 
 const AUTH_TABS: { key: AuthMode; label: string }[] = [
   { key: 'login', label: '로그인' },
-  { key: 'signup', label: '첫 로그인 · 가입' },
+  { key: 'employee', label: '직원 가입' },
+  { key: 'company', label: '회사 등록' },
 ]
+
+const MODE_COPY: Record<AuthMode, { title: string; desc: string }> = {
+  login: {
+    title: '프로젝트로 돌아가기',
+    desc: '회사 이메일로 로그인하면 참여 중인 프로젝트만 보입니다.',
+  },
+  employee: {
+    title: '직원으로 가입하기',
+    desc: '등록된 회사 메일로 인증한 뒤 부서를 골라 가입합니다. 프로젝트와 팀은 관리자가 배정합니다.',
+  },
+  company: {
+    title: '회사 워크스페이스 만들기',
+    desc: '회사 메일 도메인으로 워크스페이스를 만들고 관리자 계정으로 시작합니다.',
+  },
+}
 
 const FEATURES = [
   {
@@ -30,8 +47,7 @@ const FEATURES = [
 ]
 
 // MSW 전체 목업 모드에서만 노출하는 테스트 계정 (src/mocks/data.ts 와 같은 값)
-const SHOW_DEMO_ACCOUNTS =
-  import.meta.env.DEV && (import.meta.env.VITE_API_MOCKING ?? 'all') === 'all'
+const SHOW_DEMO_ACCOUNTS = import.meta.env.DEV && import.meta.env.VITE_API_MOCKING === 'all'
 const DEMO_PASSWORD = 'brain2026!'
 const DEMO_ACCOUNTS = [
   { email: 'gildong.hong@hedy.co.kr', name: '홍길동', team: '기획팀', role: '팀원' },
@@ -61,10 +77,6 @@ function LoginPage() {
       setError('회사 이메일과 6자 이상의 비밀번호를 입력해 주세요.')
       return
     }
-    if (mode === 'signup') {
-      setError('가입은 백엔드 연결 후 사용할 수 있습니다.')
-      return
-    }
     setError('')
     loginMutation.mutate(
       { email, password },
@@ -76,6 +88,22 @@ function LoginPage() {
               ? '이메일 또는 비밀번호가 올바르지 않습니다.'
               : '로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.',
           ),
+      },
+    )
+  }
+
+  // 가입이 끝나면 같은 계정으로 바로 로그인한다. 실패하면 로그인 탭에서 다시 시도하게 한다
+  const handleSignupComplete = (signupEmail: string, signupPassword: string) => {
+    loginMutation.mutate(
+      { email: signupEmail, password: signupPassword },
+      {
+        onSuccess: () => navigate('/dashboard', { replace: true }),
+        onError: () => {
+          setMode('login')
+          setEmail(signupEmail)
+          setPassword('')
+          setError('가입은 완료되었습니다. 로그인해 주세요.')
+        },
       },
     )
   }
@@ -144,7 +172,10 @@ function LoginPage() {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setMode(tab.key)}
+                onClick={() => {
+                  setMode(tab.key)
+                  setError('')
+                }}
                 className={`h-full flex-1 cursor-pointer whitespace-nowrap rounded-full font-label text-[11.5px] transition ${mode === tab.key ? 'bg-foreground-50 text-background-950' : 'text-foreground-400 hover:text-foreground-100'}`}
               >
                 {tab.label}
@@ -153,54 +184,55 @@ function LoginPage() {
           </div>
 
           <h2 className="mt-5 font-heading text-[20px] text-foreground-50">
-            {mode === 'login' ? '프로젝트로 돌아가기' : '워크스페이스 만들기'}
+            {MODE_COPY[mode].title}
           </h2>
           <p className="mt-1 text-[11.5px] leading-relaxed text-foreground-500">
-            {mode === 'login'
-              ? '회사 이메일로 로그인하면 참여 중인 프로젝트만 보입니다.'
-              : '가입 후 관리자가 프로젝트와 팀을 배정합니다.'}
+            {MODE_COPY[mode].desc}
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-3" noValidate>
-            <label className="block">
-              <span className="mb-1.5 block text-[10.5px] text-foreground-500">회사 이메일</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                className={inputClass}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[10.5px] text-foreground-500">비밀번호</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                className={inputClass}
-              />
-            </label>
-            {mode === 'signup' && (
+          {mode !== 'login' ? (
+            <SignupForm
+              key={mode}
+              kind={mode}
+              loggingIn={loginMutation.isPending}
+              onComplete={handleSignupComplete}
+            />
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-5 space-y-3" noValidate>
               <label className="block">
-                <span className="mb-1.5 block text-[10.5px] text-foreground-500">회사명</span>
-                <input defaultValue="헤디" className={inputClass} />
+                <span className="mb-1.5 block text-[10.5px] text-foreground-500">회사 이메일</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className={inputClass}
+                />
               </label>
-            )}
-            {error && (
-              <p className="flex items-center gap-1.5 rounded-md border border-red-400/30 bg-red-400/10 px-2.5 py-2 text-[11px] text-red-200">
-                <i className="ri-error-warning-line text-[13px]" /> {error}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={loginMutation.isPending}
-              className="h-10 w-full cursor-pointer whitespace-nowrap rounded-md bg-foreground-50 font-label text-[12.5px] font-semibold text-background-950 transition hover:bg-foreground-100"
-            >
-              {mode === 'login' ? '로그인' : '가입하고 시작하기'}
-            </button>
-          </form>
+              <label className="block">
+                <span className="mb-1.5 block text-[10.5px] text-foreground-500">비밀번호</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className={inputClass}
+                />
+              </label>
+              {error && (
+                <p className="flex items-center gap-1.5 rounded-md border border-red-400/30 bg-red-400/10 px-2.5 py-2 text-[11px] text-red-200">
+                  <i className="ri-error-warning-line text-[13px]" /> {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={loginMutation.isPending}
+                className="h-10 w-full cursor-pointer whitespace-nowrap rounded-md bg-foreground-50 font-label text-[12.5px] font-semibold text-background-950 transition hover:bg-foreground-100"
+              >
+                로그인
+              </button>
+            </form>
+          )}
 
           {SHOW_DEMO_ACCOUNTS && (
             <div className="mt-5">
@@ -236,9 +268,6 @@ function LoginPage() {
             <p className="flex items-center gap-1.5 text-[10.5px] leading-relaxed text-foreground-500">
               <i className="ri-information-line text-[12px] text-primary-400" />
               게스트(고객사)는 초대받은 프로젝트의 ‘외부 공유’ 문서만 열람합니다.
-            </p>
-            <p className="mt-2 text-[10px] text-foreground-600">
-              이 화면은 발표용 목업입니다. 실제 가입·인증은 백엔드 연결 후 동작합니다.
             </p>
           </div>
         </section>

@@ -101,25 +101,27 @@ async def get_company_by_email_domain(
     return await db.scalar(select(Company).where(Company.email_domain == email_domain))
 
 
-# 회사의 부서 목록 조회
+# 회사의 삭제되지 않은 부서 목록 조회
 async def get_company_departments(
     db: AsyncSession, company_id: int
 ) -> list[Department]:
     result = await db.scalars(
         select(Department)
-        .where(Department.company_id == company_id)
+        .where(Department.company_id == company_id, Department.is_deleted == YN.N)
         .order_by(Department.name, Department.dept_id)
     )
     return list(result)
 
 
-# 해당 회사에 속한 부서 조회
+# 해당 회사에 속한 삭제되지 않은 부서 조회
 async def get_company_department(
     db: AsyncSession, company_id: int, dept_id: int
 ) -> Department | None:
     return await db.scalar(
         select(Department).where(
-            Department.dept_id == dept_id, Department.company_id == company_id
+            Department.dept_id == dept_id,
+            Department.company_id == company_id,
+            Department.is_deleted == YN.N,
         )
     )
 
@@ -131,7 +133,7 @@ async def get_company_for_update(db: AsyncSession, company_id: int) -> Company |
     )
 
 
-# 회사의 같은 이름의 부서가 있는지 확인
+# 회사의 같은 이름의 부서가 있는지 확인 (UNIQUE 제약이라 삭제된 부서도 포함)
 async def department_name_exists(db: AsyncSession, company_id: int, name: str) -> bool:
     return await db.scalar(
         select(

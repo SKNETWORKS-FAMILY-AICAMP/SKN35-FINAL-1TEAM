@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router'
 
 import { useLogout, useSession } from '../../hooks/useAuth'
 import Header from './Header'
+import NoProjectScreen from './NoProjectScreen'
 import Sidebar from './Sidebar'
 
 function AppLayout() {
@@ -16,24 +17,7 @@ function AppLayout() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
   if (session.noProject) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
-        <p className="overline">no project</p>
-        <h1 className="font-heading text-[24px] font-light text-foreground-50">
-          참여 중인 프로젝트가 없습니다
-        </h1>
-        <p className="text-[13.5px] text-foreground-500">
-          프로젝트 오너에게 멤버 추가를 요청해 주세요.
-        </p>
-        <button
-          type="button"
-          onClick={logout}
-          className="mt-4 h-9 cursor-pointer rounded-md border border-background-600/80 px-4 text-[13px] text-foreground-200 transition hover:bg-background-800/60"
-        >
-          로그아웃
-        </button>
-      </div>
-    )
+    return <NoProjectScreen onLogout={logout} />
   }
   if (!session.ready) return null
 

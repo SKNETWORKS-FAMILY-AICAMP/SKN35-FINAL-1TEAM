@@ -94,9 +94,18 @@ async def get_project_teams_by_ids(
 
 # 프로젝트 팀 행 생성 후 반환
 async def create_project_team(
-    db: AsyncSession, project_id: int, name: str, team_leader: int
+    db: AsyncSession,
+    project_id: int,
+    name: str,
+    team_leader: int,
+    description: str | None = None,
 ) -> ProjectTeam:
-    team = ProjectTeam(project_id=project_id, name=name, team_leader=team_leader)
+    team = ProjectTeam(
+        project_id=project_id,
+        name=name,
+        team_leader=team_leader,
+        description=description,
+    )
     db.add(team)
     await db.flush()  # project_team_id를 받아오기 위해
     return team
