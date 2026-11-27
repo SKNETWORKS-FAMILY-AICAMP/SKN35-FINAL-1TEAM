@@ -6,8 +6,11 @@
 - 파서 이름과 버전은 문서 버전 기록에 남긴다 (버전이 바뀌면 문단 분할이 달라질 수 있음).
 """
 
+from importlib.metadata import version
+from pathlib import Path
 from typing import Protocol
-from app.pipeline.models import ParsedDocument
+
+from app.pipeline.models import Block, ParsedDocument
 
 
 class ParseError(Exception):
@@ -38,3 +41,35 @@ class DocumentParser(Protocol):
           이후 단계(정규화 → 마스킹 → 청킹)가 처리한다.
         """
         ...
+
+
+class FormatParser:
+    """하위 클래스는 name, extensions, _package와 _read()만 정한다."""
+
+    name: str
+    extensions: tuple[str, ...]
+    _package: str
+
+    @property
+    def version(self) -> str:
+        return version(self._package)
+
+    def parse(self, path: str) -> ParsedDocument:
+        suffix = Path(path).suffix.lower().lstrip(".")
+        if suffix not in self.extensions:
+            raise ParseError(f"지원하지 않는 형식: {suffix!r}")
+        if not Path(path).is_file():
+            raise ParseError(f"파일을 찾을 수 없음: {path}")
+        warnings: list[str] = []
+        try:
+            blocks = self._read(path, warnings)
+        except ParseError:
+            raise
+        except Exception as exc:
+            raise ParseError(f"문서 변환 실패: {path} ({exc})") from exc
+        if not blocks:
+            warnings.append("추출된 텍스트가 없음 (스캔본 또는 빈 문서 의심)")
+        return ParsedDocument(blocks=tuple(blocks), source_format=suffix, warnings=tuple(warnings))
+
+    def _read(self, path: str, warnings: list[str]) -> list[Block]:
+        raise NotImplementedError
