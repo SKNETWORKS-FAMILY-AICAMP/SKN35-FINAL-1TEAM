@@ -1,7 +1,7 @@
 import secrets
-from datetime import UTC, datetime, timedelta
 
 import jwt
+from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,6 +162,7 @@ def get_verified_email(
 # 회사 메일 확인 후 6자리 인증번호 발송 (회사 등록·직원 가입 공용)
 async def send_email_verification(
     db: AsyncSession,
+    redis: Redis,
     email: str,
     purpose: VerificationPurpose,
     company_name: str | None = None,
@@ -175,37 +176,37 @@ async def send_email_verification(
     if await user_repo.email_exists(db, email):
         raise ConflictError("이미 가입된 이메일입니다.")
 
-    verification = await auth_repo.get_email_verification_for_update(db, email)
-    now = datetime.now(UTC)
-
-    if verification is not None and now < verification.last_sent_at + timedelta(
-        seconds=VERIFICATION_RESEND_SECONDS
+    # SET NX라 같은 이메일로 동시에 요청이 와도 하나만 통과
+    if not await auth_repo.acquire_resend_cooldown(
+        redis, email, VERIFICATION_RESEND_SECONDS
     ):
         raise AppError("인증번호는 60초 후에 다시 요청할 수 있습니다.")
 
     code = f"{secrets.randbelow(1_000_000):06d}"
 
-    try:
-        await auth_repo.save_email_verification(
-            db,
-            verification,
-            email=email,
-            purpose=purpose,
-            company_name=company_name,
-            code_hash=hash_verification_code(email, code),
-            expires_at=now + timedelta(minutes=VERIFICATION_CODE_EXPIRE_MINUTES),
-            last_sent_at=now,
-        )
-    except IntegrityError:
-        # 같은 이메일로 동시에 첫 요청이 들어온 경우 UNIQUE 제약에서 걸림
-        raise AppError("인증번호는 60초 후에 다시 요청할 수 있습니다.") from None
+    await auth_repo.save_email_verification(
+        redis,
+        email=email,
+        purpose=purpose,
+        company_name=company_name,
+        code_hash=hash_verification_code(email, code),
+        expire_seconds=VERIFICATION_CODE_EXPIRE_MINUTES * 60,
+    )
 
-    # 발송에 실패하면 get_db가 rollback해서 재발송 대기시간이 남지 않음
-    await mailer.send_verification_code(email, code, VERIFICATION_CODE_EXPIRE_MINUTES)
+    try:
+        await mailer.send_verification_code(
+            email, code, VERIFICATION_CODE_EXPIRE_MINUTES
+        )
+    except Exception:
+        # Redis는 get_db의 rollback 대상이 아니라서 재발송 대기시간을 직접 풀어줌
+        await auth_repo.release_resend_cooldown(redis, email)
+        raise
 
 
 # 직원 가입: 메일 도메인의 회사와 부서를 확인한 뒤 인증번호 발송
-async def send_employee_verification(db: AsyncSession, email: str) -> None:
+async def send_employee_verification(
+    db: AsyncSession, redis: Redis, email: str
+) -> None:
     company = await user_repo.get_company_by_email_domain(db, get_email_domain(email))
 
     if company is None:
@@ -214,32 +215,22 @@ async def send_employee_verification(db: AsyncSession, email: str) -> None:
     if not await user_repo.get_company_departments(db, company.company_id):
         raise AppError("등록된 부서가 없습니다. 회사 관리자에게 문의해 주세요.")
 
-    await send_email_verification(db, email, VerificationPurpose.EMPLOYEE_SIGNUP)
+    await send_email_verification(db, redis, email, VerificationPurpose.EMPLOYEE_SIGNUP)
 
 
 # 인증번호 확인 후 회원가입 화면에 필요한 인증 토큰과 정보 반환
 async def confirm_email_verification(
-    db: AsyncSession, email: str, code: str
+    db: AsyncSession, redis: Redis, email: str, code: str
 ) -> EmailVerificationConfirmResponse:
-    verification = await auth_repo.get_email_verification_for_update(db, email)
+    # 시도 횟수 증가·비교·삭제를 Redis에서 한 번에 처리 (틀린 횟수도 거기서 바로 저장됨)
+    verified = await auth_repo.consume_email_verification(
+        redis, email, hash_verification_code(email, code), MAX_VERIFICATION_ATTEMPTS
+    )
 
-    if (
-        verification is None
-        or verification.expires_at <= datetime.now(UTC)
-        or verification.attempt_count >= MAX_VERIFICATION_ATTEMPTS
-    ):
+    if verified is None:
         raise AppError("인증번호가 올바르지 않거나 만료되었습니다.")
 
-    if not secrets.compare_digest(
-        verification.code_hash, hash_verification_code(email, code)
-    ):
-        verification.attempt_count += 1
-        # 에러를 던지면 get_db가 rollback하므로 틀린 횟수는 여기서 먼저 저장
-        await db.commit()
-        raise AppError("인증번호가 올바르지 않거나 만료되었습니다.")
-
-    purpose = verification.purpose
-    company_name = verification.company_name
+    purpose, company_name = verified
     departments = []
 
     if purpose == VerificationPurpose.EMPLOYEE_SIGNUP:
@@ -252,8 +243,6 @@ async def confirm_email_verification(
 
         company_name = company.name
         departments = await user_repo.get_company_departments(db, company.company_id)
-
-    await auth_repo.delete_email_verification(db, verification)
 
     return EmailVerificationConfirmResponse(
         verification_token=create_email_verification_token(
