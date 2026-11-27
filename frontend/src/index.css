@@ -1,1 +1,279 @@
 @import 'tailwindcss';
+@import 'remixicon/fonts/remixicon.css';
+
+@theme {
+  --font-heading: 'Inter Tight', 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+  --font-body: 'Pretendard Variable', Pretendard, 'Inter Tight', system-ui, sans-serif;
+  --font-label: 'Inter Tight', 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+
+  --color-background-50: oklch(0.965 0.006 264);
+  --color-background-100: oklch(0.91 0.012 264);
+  --color-background-200: oklch(0.8 0.016 264);
+  --color-background-300: oklch(0.67 0.02 264);
+  --color-background-400: oklch(0.54 0.026 264);
+  --color-background-500: oklch(0.41 0.032 264);
+  --color-background-600: oklch(0.315 0.036 264);
+  --color-background-700: oklch(0.255 0.032 264);
+  --color-background-800: oklch(0.207 0.026 264);
+  --color-background-900: oklch(0.176 0.021 265);
+  --color-background-950: oklch(0.145 0.018 265);
+
+  --color-foreground-50: oklch(0.975 0.01 264);
+  --color-foreground-100: oklch(0.94 0.012 264);
+  --color-foreground-200: oklch(0.88 0.014 264);
+  --color-foreground-300: oklch(0.8 0.016 264);
+  --color-foreground-400: oklch(0.715 0.018 264);
+  --color-foreground-500: oklch(0.65 0.02 264);
+  --color-foreground-600: oklch(0.58 0.02 264);
+  --color-foreground-700: oklch(0.5 0.022 264);
+  --color-foreground-800: oklch(0.26 0.022 264);
+  --color-foreground-900: oklch(0.19 0.02 264);
+  --color-foreground-950: oklch(0.14 0.018 265);
+
+  --color-primary-50: oklch(0.975 0.018 205);
+  --color-primary-100: oklch(0.94 0.045 205);
+  --color-primary-200: oklch(0.9 0.07 206);
+  --color-primary-300: oklch(0.86 0.1 208);
+  --color-primary-400: oklch(0.82 0.12 210);
+  --color-primary-500: oklch(0.78 0.13 212);
+  --color-primary-600: oklch(0.68 0.12 213);
+  --color-primary-700: oklch(0.56 0.1 214);
+  --color-primary-800: oklch(0.42 0.075 214);
+  --color-primary-900: oklch(0.32 0.055 215);
+  --color-primary-950: oklch(0.235 0.04 216);
+
+  --color-accent-50: oklch(0.975 0.02 165);
+  --color-accent-100: oklch(0.93 0.05 165);
+  --color-accent-200: oklch(0.88 0.08 165);
+  --color-accent-300: oklch(0.83 0.11 165);
+  --color-accent-400: oklch(0.79 0.14 164);
+  --color-accent-500: oklch(0.75 0.15 163);
+  --color-accent-600: oklch(0.66 0.14 163);
+  --color-accent-700: oklch(0.55 0.115 163);
+  --color-accent-800: oklch(0.42 0.085 163);
+  --color-accent-900: oklch(0.32 0.06 163);
+  --color-accent-950: oklch(0.235 0.045 163);
+
+  --color-secondary-50: oklch(0.965 0.012 220);
+  --color-secondary-100: oklch(0.9 0.022 220);
+  --color-secondary-200: oklch(0.8 0.03 220);
+  --color-secondary-300: oklch(0.69 0.038 220);
+  --color-secondary-400: oklch(0.58 0.042 220);
+  --color-secondary-500: oklch(0.48 0.042 221);
+  --color-secondary-600: oklch(0.4 0.04 221);
+  --color-secondary-700: oklch(0.32 0.035 221);
+  --color-secondary-800: oklch(0.25 0.03 221);
+  --color-secondary-900: oklch(0.2 0.026 221);
+  --color-secondary-950: oklch(0.16 0.022 221);
+
+  /* 상태 색은 디자인 시안과 같은 hex 값으로 고정 */
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-glow: 0 0 24px #22d3ee38;
+  --shadow-panel: 0 18px 48px -24px #000000d9;
+
+  --animate-fade-up: fade-up 0.45s ease-out both;
+  --animate-pulse-dot: pulse-dot 1.8s ease-in-out infinite;
+
+  @keyframes fade-up {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    to {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+:root {
+  --bg-deep-teal: oklch(27% 0.045 220);
+  --bg-glass: color-mix(in oklab, var(--color-background-900) 72%, transparent);
+
+  --border-subtle: #ffffff12;
+  --border-default: #ffffff1c;
+  --border-strong: #fff3;
+
+  --diff-added: #34d399;
+  --diff-added-bg: #34d3991c;
+  --diff-removed: #f87171;
+  --diff-removed-bg: #f871711c;
+  --diff-modified: #fbbf24;
+  --diff-modified-bg: #fbbf241a;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  html {
+    font-family: var(--font-body);
+    background-color: var(--color-background-950);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    color: var(--color-foreground-100);
+    background-color: var(--color-background-950);
+    background-image:
+      radial-gradient(ellipse 90% 55% at 50% 0%, var(--bg-deep-teal) 0%, transparent 62%),
+      linear-gradient(var(--border-subtle) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      48px 48px,
+      48px 48px;
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    color: var(--color-foreground-50);
+    background: #22d3ee40;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #ffffff1f padding-box content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #ffffff38 padding-box content-box;
+  }
+}
+
+@layer components {
+  .panel {
+    background-color: var(--bg-glass);
+    border: 1px solid var(--border-default);
+    backdrop-filter: blur(16px);
+    border-radius: 16px;
+  }
+
+  .panel-flat {
+    background-color: color-mix(in oklab, var(--color-background-900) 62%, transparent);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+  }
+
+  .overline {
+    font-family: var(--font-label);
+    font-size: 12.5px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-foreground-500);
+  }
+
+  .stat-value {
+    font-family: var(--font-heading);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+
+  .diff-row {
+    position: relative;
+    padding: 12px 14px 12px 16px;
+    border-left: 3px solid transparent;
+    border-radius: 10px;
+  }
+
+  .diff-added {
+    background: var(--diff-added-bg);
+    border-left-color: var(--diff-added);
+  }
+
+  .diff-added .diff-text {
+    color: var(--diff-added);
+  }
+
+  .diff-removed {
+    background: var(--diff-removed-bg);
+    border-left-color: var(--diff-removed);
+  }
+
+  .diff-removed .diff-text {
+    color: var(--diff-removed);
+    text-decoration: line-through #f8717180;
+  }
+
+  .diff-modified {
+    background: var(--diff-modified-bg);
+    border-left-color: var(--diff-modified);
+  }
+
+  .diff-modified .diff-text {
+    color: #fcd34d;
+  }
+
+  .landing-kicker {
+    font-family: var(--font-label);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-foreground-500);
+  }
+
+  .landing-veil {
+    background-image: linear-gradient(
+      to top,
+      var(--color-background-950) 4%,
+      color-mix(in oklab, var(--color-background-950) 72%, transparent) 42%,
+      color-mix(in oklab, var(--color-background-950) 28%, transparent) 78%,
+      color-mix(in oklab, var(--color-background-950) 55%, transparent) 100%
+    );
+  }
+
+  .landing-glow {
+    background-image: radial-gradient(
+      58% 52% at 50% 100%,
+      color-mix(in oklab, var(--color-primary-500) 16%, transparent) 0%,
+      transparent 72%
+    );
+  }
+}
