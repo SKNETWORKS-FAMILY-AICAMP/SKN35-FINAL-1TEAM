@@ -1,0 +1,492 @@
+파일: C:\sk-encoa\01FINAL\SKN35-FINAL-1TEAM\data\docset\1_문서세트\26.11.19쇼핑몰A\v1\em_02_업무프로세스정의서.docx
+형식=docx  블록=161개  경고=[]
+----------------------------------------------------------------------
+
+[paragraph] Location(index=0)
+    가나유통 온라인몰 차세대 구축
+    업무프로세스정의서
+
+[table 2]
+    [table_header] Location(index=1, table_row=1)
+        항목  |  내용
+    [table_row] Location(index=1, table_row=2)
+        항목: 프로젝트명  |  내용: 가나유통 온라인몰 차세대 구축
+    [table_row] Location(index=1, table_row=3)
+        항목: 발주처  |  내용: (가상) 가나유통
+    [table_row] Location(index=1, table_row=4)
+        항목: 수행사  |  내용: (가상) 누리정보기술
+    [table_row] Location(index=1, table_row=5)
+        항목: 작성 팀  |  내용: 업무분석·기획
+    [table_row] Location(index=1, table_row=6)
+        항목: 문서 버전  |  내용: v1
+    [table_row] Location(index=1, table_row=7)
+        항목: 문서 상태  |  내용: HEAD 승인본
+    [table_row] Location(index=1, table_row=8)
+        항목: 공개 범위  |  내용: 프로젝트 내부
+    [table_row] Location(index=1, table_row=9)
+        항목: 최초 작성일  |  내용: 2026-10-09
+    [table_row] Location(index=1, table_row=10)
+        항목: 작성자  |  내용: 이수아
+    [table_row] Location(index=1, table_row=11)
+        항목: 검토자  |  내용: 권민호
+    [table_row] Location(index=1, table_row=12)
+        항목: 승인자  |  내용: 한지수
+
+[heading] Location(index=2)
+    개정 이력
+
+[table 4]
+    제목 경로: [개정 이력]
+    [table_header] Location(index=3, table_row=1)
+        버전  |  일자  |  변경 내용  |  작성자  |  승인자
+    [table_row] Location(index=3, table_row=2)
+        버전: v1  |  일자: 2026-10-09  |  변경 내용: 최초 작성  |  작성자: 이수아  |  승인자: 한지수
+
+[heading] Location(index=4)
+    1. 개요
+
+[paragraph] Location(index=5)
+    제목 경로: [1. 개요]
+    본 문서는 구 쇼핑몰의 현행(As-Is) 업무와 차세대 시스템의 개선(To-Be) 업무 흐름을 정의한다. 각 단계는 요구사항(FR)과 인터페이스(IF)에 연결되며, 업무 규칙(BR)과 예외 흐름(EX)은 화면·인터페이스·테스트케이스 설계의 기준이 된다.
+
+[heading] Location(index=6)
+    2. 프로세스 목록
+
+[table 8]
+    제목 경로: [2. 프로세스 목록]
+    [table_header] Location(index=7, table_row=1)
+        프로세스 ID  |  프로세스명  |  담당 개발팀  |  관련 요구사항
+        병합 셀 A1:B1
+    [table_row] Location(index=7, table_row=2)
+        프로세스 ID(1): P-01  |  프로세스 ID(2): 나나  |  프로세스명 + 담당 개발팀 (병합 셀 C2:D2): 회원 가입·인증
+        회원·상품 업무개발  |  관련 요구사항: FR-001, FR-002, FR-003
+    [table_row] Location(index=7, table_row=3)
+        프로세스 ID: P-02  |  프로세스명: 기존 회원 전환  |  담당 개발팀: 회원·상품 업무개발  |  관련 요구사항: FR-003, FR-024
+        병합 셀 A3:B3
+    [table_row] Location(index=7, table_row=4)
+        프로세스 ID: P-03  |  프로세스명: 상품·재고 동기화  |  담당 개발팀: 회원·상품 업무개발  |  관련 요구사항: FR-022, FR-025, FR-026
+        병합 셀 A4:B4
+    [table_row_group] Location(index=7, table_row=5)
+        프로세스 ID: P-04  |  프로세스명 + 담당 개발팀 (병합 셀 C5:D5): 주문·결제 [중첩 표 9 참조]  |  관련 요구사항: FR-010, FR-011, FR-013, FR-014
+        병합 셀 A5:B5
+
+      [중첩 표 9] (parent_table_cell=C5:D5)
+          제목 경로: [2. 프로세스 목록]
+          [table_header] Location(index=8, parent_table_index=7, parent_table_cell='C5', parent_table_cell_end='D5', table_row=1)
+              규칙 ID  |  내용
+          [table_row] Location(index=8, parent_table_index=7, parent_table_cell='C5', parent_table_cell_end='D5', table_row=2)
+              규칙 ID: BR-01  |  내용: 비밀번호는 8~20자, 영문·숫자·특수문자 각 1자 이상
+          [table_row] Location(index=8, parent_table_index=7, parent_table_cell='C5', parent_table_cell_end='D5', table_row=3)
+              규칙 ID: BR-02  |  내용: 인증 링크는 24시간 유효하며 미인증 회원은 주문할 수 없다
+          [table_row] Location(index=8, parent_table_index=7, parent_table_cell='C5', parent_table_cell_end='D5', table_row=4)
+              규칙 ID: BR-03  |  내용: 비밀번호를 5회 연속 틀리면 30분 잠금
+    [table_row] Location(index=7, table_row=6)
+        프로세스 ID: P-05  |  프로세스명: 출고·배송  |  담당 개발팀: 주문·결제 업무개발  |  관련 요구사항: FR-017, FR-023, FR-027
+        병합 셀 A6:B6
+    [table_row] Location(index=7, table_row=7)
+        프로세스 ID: P-06  |  프로세스명: 주문 취소·환불  |  담당 개발팀: 주문·결제 업무개발  |  관련 요구사항: FR-016, FR-028
+        병합 셀 A7:B7
+    [table_row] Location(index=7, table_row=8)
+        프로세스 ID: P-07  |  프로세스명: 구매확정·적립·매출 전송  |  담당 개발팀: 주문·결제 업무개발  |  관련 요구사항: FR-018, FR-021, FR-028
+        병합 셀 A8:B8
+
+[heading] Location(index=9)
+    3. 프로세스 상세
+
+[heading] Location(index=10)
+    P-01 회원 가입·인증
+
+[paragraph] Location(index=11)
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    As-Is(현행)
+
+[paragraph] Location(index=12)
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    구 쇼핑몰은 이메일 인증 없이 가입 즉시 주문할 수 있어 허위 가입이 많았다(월 평균 약 1,200건 휴면 처리).
+
+[paragraph] Location(index=13)
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    To-Be 업무 흐름
+
+[table 15]
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    [table_header] Location(index=14, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=14, table_row=2)
+        No: 1  |  단계: 가입 정보 입력·약관 동의  |  수행자: 비회원  |  시스템: 웹(SCR-002)  |  관련 요구사항: FR-001  |  관련 인터페이스: IF-003
+    [table_row] Location(index=14, table_row=3)
+        No: 2  |  단계: 회원 생성·웰컴 쿠폰 발급  |  수행자: 시스템  |  시스템: VSM 백엔드  |  관련 요구사항: FR-001  |  관련 인터페이스: IF-001
+    [table_row] Location(index=14, table_row=4)
+        No: 3  |  단계: 인증 메일 발송  |  수행자: 시스템  |  시스템: 가상 메일 서비스  |  관련 요구사항: FR-002  |  관련 인터페이스: IF-024
+    [table_row] Location(index=14, table_row=5)
+        No: 4  |  단계: 인증 링크 클릭 → 인증 완료  |  수행자: 회원  |  시스템: 웹  |  관련 요구사항: FR-002  |  관련 인터페이스: -
+    [table_row] Location(index=14, table_row=6)
+        No: 5  |  단계: 로그인  |  수행자: 회원  |  시스템: 웹(SCR-001)  |  관련 요구사항: FR-003  |  관련 인터페이스: IF-002
+
+[paragraph] Location(index=15)
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    업무 규칙
+
+[table 17]
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    [table_header] Location(index=16, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=16, table_row=2)
+        규칙 ID: BR-01  |  내용: 비밀번호는 8~20자, 영문·숫자·특수문자 각 1자 이상
+    [table_row] Location(index=16, table_row=3)
+        규칙 ID: BR-02  |  내용: 인증 링크는 24시간 유효하며 미인증 회원은 주문할 수 없다
+    [table_row] Location(index=16, table_row=4)
+        규칙 ID: BR-03  |  내용: 비밀번호를 5회 연속 틀리면 30분 잠금
+
+[paragraph] Location(index=17)
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    예외 흐름
+
+[table 19]
+    제목 경로: [3. 프로세스 상세 > P-01 회원 가입·인증]
+    [table_header] Location(index=18, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=18, table_row=2)
+        예외 ID: EX-01  |  상황: 이미 가입된 이메일  |  처리: 가입을 멈추고 '이미 가입된 이메일입니다' 안내
+    [table_row] Location(index=18, table_row=3)
+        예외 ID: EX-02  |  상황: 인증 메일 발송 실패  |  처리: 3회 재시도 후 '인증 메일 재발송' 버튼 제공
+
+[heading] Location(index=19)
+    P-02 기존 회원 전환
+
+[paragraph] Location(index=20)
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    As-Is(현행)
+
+[paragraph] Location(index=21)
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    구 쇼핑몰 회원 약 120만 명(휴면 제외 약 78만 명)의 비밀번호가 무솔트 SHA-256 해시로 저장돼 신규 시스템 보안 기준을 충족하지 못한다.
+
+[paragraph] Location(index=22)
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    To-Be 업무 흐름
+
+[table 24]
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    [table_header] Location(index=23, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=23, table_row=2)
+        No: 1  |  단계: 컷오버 시 회원·배송지·포인트 이행  |  수행자: 공통기술·연계&데이터(DA)팀  |  시스템: 이행 배치  |  관련 요구사항: FR-024  |  관련 인터페이스: IF-038
+    [table_row] Location(index=23, table_row=3)
+        No: 2  |  단계: 이행 회원 첫 로그인 시도  |  수행자: 이행 회원  |  시스템: 웹(SCR-001)  |  관련 요구사항: FR-003  |  관련 인터페이스: IF-002
+    [table_row] Location(index=23, table_row=4)
+        No: 3  |  단계: 전환 화면에서 약관 재동의·새 비밀번호 설정  |  수행자: 이행 회원  |  시스템: 웹(SCR-015)  |  관련 요구사항: FR-024  |  관련 인터페이스: IF-031
+    [table_row] Location(index=23, table_row=5)
+        No: 4  |  단계: 전환 완료 후 일반 회원과 동일하게 이용  |  수행자: 이행 회원  |  시스템: 웹  |  관련 요구사항: FR-024  |  관련 인터페이스: -
+
+[paragraph] Location(index=24)
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    업무 규칙
+
+[table 26]
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    [table_header] Location(index=25, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=25, table_row=2)
+        규칙 ID: BR-04  |  내용: 기존 비밀번호는 이행하지 않으며 새 비밀번호는 8~20자 규칙을 따른다
+    [table_row] Location(index=25, table_row=3)
+        규칙 ID: BR-05  |  내용: 이관 포인트 소멸일은 이행일로부터 1년
+    [table_row] Location(index=25, table_row=4)
+        규칙 ID: BR-06  |  내용: 같은 이메일 계정이 여럿이면 최근 로그인 계정만 이행
+
+[paragraph] Location(index=26)
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    예외 흐름
+
+[table 28]
+    제목 경로: [3. 프로세스 상세 > P-02 기존 회원 전환]
+    [table_header] Location(index=27, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=27, table_row=2)
+        예외 ID: EX-03  |  상황: 이행 대상이 아닌 계정(휴면·탈퇴)  |  처리: 신규 가입 안내
+    [table_row] Location(index=27, table_row=3)
+        예외 ID: EX-04  |  상황: 전환 도중 이탈  |  처리: 다음 로그인 때 전환 화면으로 다시 이동
+
+[heading] Location(index=28)
+    P-03 상품·재고 동기화
+
+[paragraph] Location(index=29)
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    As-Is(현행)
+
+[paragraph] Location(index=30)
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    MD가 ERP 상품 정보를 엑셀로 내려받아 구 쇼핑몰 관리자 화면에 수기 등록했고, 재고는 하루 1회(새벽) 동기화돼 품절 상품 주문이 월 약 300건 발생했다.
+
+[paragraph] Location(index=31)
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    To-Be 업무 흐름
+
+[table 33]
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    [table_header] Location(index=32, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=32, table_row=2)
+        No: 1  |  단계: ERP에 상품·가격 등록 또는 변경  |  수행자: 가나유통 MD  |  시스템: ERP  |  관련 요구사항: FR-025  |  관련 인터페이스: -
+    [table_row] Location(index=32, table_row=3)
+        No: 2  |  단계: 상품 마스터 수신·상품 생성/갱신  |  수행자: 시스템  |  시스템: EAI → VSM  |  관련 요구사항: FR-025  |  관련 인터페이스: IF-032
+    [table_row] Location(index=32, table_row=4)
+        No: 3  |  단계: 전시 정보·판매상태 등록  |  수행자: 관리자  |  시스템: 웹(SCR-013)  |  관련 요구사항: FR-022  |  관련 인터페이스: IF-019
+    [table_row] Location(index=32, table_row=5)
+        No: 4  |  단계: ERP 재고 수신(5분 주기)  |  수행자: 시스템  |  시스템: EAI → VSM  |  관련 요구사항: FR-026  |  관련 인터페이스: IF-033
+    [table_row] Location(index=32, table_row=6)
+        No: 5  |  단계: 주문 생성·취소 시 재고 변경분 ERP 전송  |  수행자: 시스템  |  시스템: VSM → EAI  |  관련 요구사항: FR-026  |  관련 인터페이스: IF-034
+
+[paragraph] Location(index=33)
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    업무 규칙
+
+[table 35]
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    [table_header] Location(index=34, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=34, table_row=2)
+        규칙 ID: BR-07  |  내용: 상품코드·상품명·판매가는 ERP가 원천이며 쇼핑몰에서 수정할 수 없다
+    [table_row] Location(index=34, table_row=3)
+        규칙 ID: BR-08  |  내용: 판매가 변경은 결제대기 주문 금액에 반영하지 않는다
+    [table_row] Location(index=34, table_row=4)
+        규칙 ID: BR-09  |  내용: 재고가 0이 되면 판매상태를 품절로 자동 변경
+
+[paragraph] Location(index=35)
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    예외 흐름
+
+[table 37]
+    제목 경로: [3. 프로세스 상세 > P-03 상품·재고 동기화]
+    [table_header] Location(index=36, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=36, table_row=2)
+        예외 ID: EX-05  |  상황: 재고 동기화 3회 연속 실패  |  처리: 관리자 알림 메일, 마지막 동기화 재고로 판매 지속
+    [table_row] Location(index=36, table_row=3)
+        예외 ID: EX-06  |  상황: ERP 상품명이 쇼핑몰 길이 제한을 넘음  |  처리: 수신하지 않고 연계 오류 로그(TB_IF_LOG)에 남김
+
+[heading] Location(index=37)
+    P-04 주문·결제
+
+[paragraph] Location(index=38)
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    As-Is(현행)
+
+[paragraph] Location(index=39)
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    구 쇼핑몰은 PG 승인 결과를 화면 리다이렉트로만 받아, 승인 직후 브라우저를 닫으면 결제는 됐는데 주문이 없는 건이 월 약 40건 수기로 처리됐다.
+
+[paragraph] Location(index=40)
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    To-Be 업무 흐름
+
+[table 42]
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    [table_header] Location(index=41, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=41, table_row=2)
+        No: 1  |  단계: 장바구니 담기  |  수행자: 회원  |  시스템: 웹(SCR-006)  |  관련 요구사항: FR-010  |  관련 인터페이스: IF-007
+    [table_row] Location(index=41, table_row=3)
+        No: 2  |  단계: 주문서 작성(배송지·쿠폰·포인트)  |  수행자: 회원  |  시스템: 웹(SCR-007)  |  관련 요구사항: FR-011  |  관련 인터페이스: IF-029
+    [table_row] Location(index=41, table_row=4)
+        No: 3  |  단계: 주문 생성(결제대기, 재고 차감)  |  수행자: 시스템  |  시스템: VSM 백엔드  |  관련 요구사항: FR-011  |  관련 인터페이스: IF-008
+    [table_row] Location(index=41, table_row=5)
+        No: 4  |  단계: 결제창 인증 후 결제 승인 요청  |  수행자: 회원  |  시스템: 웹(SCR-007)  |  관련 요구사항: FR-013  |  관련 인터페이스: IF-009
+    [table_row] Location(index=41, table_row=6)
+        No: 5  |  단계: PG 승인  |  수행자: 시스템  |  시스템: VSM → 가상 PG  |  관련 요구사항: FR-013  |  관련 인터페이스: IF-021
+    [table_row] Location(index=41, table_row=7)
+        No: 6  |  단계: 주문 완료 화면·메일  |  수행자: 시스템  |  시스템: VSM 백엔드  |  관련 요구사항: FR-014  |  관련 인터페이스: IF-024
+
+[paragraph] Location(index=42)
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    업무 규칙
+
+[table 44]
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    [table_header] Location(index=43, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=43, table_row=2)
+        규칙 ID: BR-10  |  내용: 쿠폰은 주문당 1장, 정률 쿠폰은 최대 10,000원 할인
+    [table_row] Location(index=43, table_row=3)
+        규칙 ID: BR-11  |  내용: 포인트는 1,000P 이상 보유 시 10P 단위로 사용
+    [table_row] Location(index=43, table_row=4)
+        규칙 ID: BR-12  |  내용: 배송비 3,000원, 쿠폰 적용 후 상품금액 50,000원 이상이면 무료, 제주·도서산간 +3,000원
+    [table_row] Location(index=43, table_row=5)
+        규칙 ID: BR-13  |  내용: 주문 생성 후 결제 유효시간 15분
+
+[paragraph] Location(index=44)
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    예외 흐름
+
+[table 46]
+    제목 경로: [3. 프로세스 상세 > P-04 주문·결제]
+    [table_header] Location(index=45, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=45, table_row=2)
+        예외 ID: EX-07  |  상황: PG 응답 10초 타임아웃  |  처리: 재승인하지 않고 PG 결제 조회로 결과 확인(NFR-006)
+    [table_row] Location(index=45, table_row=3)
+        예외 ID: EX-08  |  상황: 결제 유효시간 경과  |  처리: 미결제 주문 자동 취소, 재고·쿠폰·포인트 복구(IF-027)
+
+[heading] Location(index=46)
+    P-05 출고·배송
+
+[paragraph] Location(index=47)
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    As-Is(현행)
+
+[paragraph] Location(index=48)
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    주문 목록을 하루 2회 엑셀로 WMS에 올리고 송장번호를 다시 엑셀로 받아 관리자 화면에 일괄 입력했다(출고 지시까지 평균 6시간).
+
+[paragraph] Location(index=49)
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    To-Be 업무 흐름
+
+[table 51]
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    [table_header] Location(index=50, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=50, table_row=2)
+        No: 1  |  단계: 주문 상품준비중 변경  |  수행자: 관리자  |  시스템: 웹(SCR-014)  |  관련 요구사항: FR-023  |  관련 인터페이스: IF-020
+    [table_row] Location(index=50, table_row=3)
+        No: 2  |  단계: WMS 출고 지시  |  수행자: 시스템  |  시스템: VSM → EAI → WMS  |  관련 요구사항: FR-027  |  관련 인터페이스: IF-036
+    [table_row] Location(index=50, table_row=4)
+        No: 3  |  단계: 출고·송장 발급  |  수행자: 물류센터  |  시스템: WMS  |  관련 요구사항: FR-027  |  관련 인터페이스: -
+    [table_row] Location(index=50, table_row=5)
+        No: 4  |  단계: 출고 결과 수신 → 배송중  |  수행자: 시스템  |  시스템: WMS → EAI → VSM  |  관련 요구사항: FR-027  |  관련 인터페이스: IF-037
+    [table_row] Location(index=50, table_row=6)
+        No: 5  |  단계: 배송 조회  |  수행자: 회원  |  시스템: 웹(SCR-010)  |  관련 요구사항: FR-017  |  관련 인터페이스: IF-013, IF-023
+
+[paragraph] Location(index=51)
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    업무 규칙
+
+[table 53]
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    [table_header] Location(index=52, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=52, table_row=2)
+        규칙 ID: BR-14  |  내용: 출고 지시 후 24시간 안에 결과가 없으면 '출고 지연' 표시
+    [table_row] Location(index=52, table_row=3)
+        규칙 ID: BR-15  |  내용: 송장번호는 최대 30자
+
+[paragraph] Location(index=53)
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    예외 흐름
+
+[table 55]
+    제목 경로: [3. 프로세스 상세 > P-05 출고·배송]
+    [table_header] Location(index=54, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=54, table_row=2)
+        예외 ID: EX-09  |  상황: WMS 장애  |  처리: 관리자가 택배사·송장번호를 직접 입력해 배송중 처리(FR-023)
+    [table_row] Location(index=54, table_row=3)
+        예외 ID: EX-10  |  상황: 택배사 조회 실패  |  처리: 10분 캐시 값을 보여 주거나 재시도 안내
+
+[heading] Location(index=55)
+    P-06 주문 취소·환불
+
+[paragraph] Location(index=56)
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    As-Is(현행)
+
+[paragraph] Location(index=57)
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    고객센터가 취소 요청을 받아 PG 관리자 화면에서 수동 취소했고, ERP 환불 전표는 재무팀이 월말에 일괄 입력했다.
+
+[paragraph] Location(index=58)
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    To-Be 업무 흐름
+
+[table 60]
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    [table_header] Location(index=59, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=59, table_row=2)
+        No: 1  |  단계: 취소 요청(결제완료·상품준비중)  |  수행자: 회원  |  시스템: 웹(SCR-009)  |  관련 요구사항: FR-016  |  관련 인터페이스: IF-012
+    [table_row] Location(index=59, table_row=3)
+        No: 2  |  단계: PG 결제 취소  |  수행자: 시스템  |  시스템: VSM → 가상 PG  |  관련 요구사항: FR-016  |  관련 인터페이스: IF-022
+    [table_row] Location(index=59, table_row=4)
+        No: 3  |  단계: 쿠폰·포인트 복원, 재고 복구·ERP 전송  |  수행자: 시스템  |  시스템: VSM 백엔드  |  관련 요구사항: FR-016  |  관련 인터페이스: IF-034
+    [table_row] Location(index=59, table_row=5)
+        No: 4  |  단계: ERP 환불 전표 전송(다음 날 04:00)  |  수행자: 시스템  |  시스템: VSM → EAI → ERP  |  관련 요구사항: FR-028  |  관련 인터페이스: IF-035
+
+[paragraph] Location(index=60)
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    업무 규칙
+
+[table 62]
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    [table_header] Location(index=61, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=61, table_row=2)
+        규칙 ID: BR-16  |  내용: 배송중 이후는 취소할 수 없다(반품·교환은 미결)
+    [table_row] Location(index=61, table_row=3)
+        규칙 ID: BR-17  |  내용: 쿠폰은 유효기간이 남은 경우만 복원
+
+[paragraph] Location(index=62)
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    예외 흐름
+
+[table 64]
+    제목 경로: [3. 프로세스 상세 > P-06 주문 취소·환불]
+    [table_header] Location(index=63, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=63, table_row=2)
+        예외 ID: EX-11  |  상황: PG 취소 실패  |  처리: 주문상태를 유지하고 관리자에게 알린 뒤 수동 처리
+    [table_row] Location(index=63, table_row=3)
+        예외 ID: EX-12  |  상황: WMS 출고 지시 후 취소 요청  |  처리: 출고 보류 연계가 미결(미결 사항 5) — 현재는 관리자 수동 확인
+
+[heading] Location(index=64)
+    P-07 구매확정·적립·매출 전송
+
+[paragraph] Location(index=65)
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    As-Is(현행)
+
+[paragraph] Location(index=66)
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    구매확정 개념 없이 배송완료 시 바로 적립해, 반품 때 포인트 회수 분쟁이 있었다.
+
+[paragraph] Location(index=67)
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    To-Be 업무 흐름
+
+[table 69]
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    [table_header] Location(index=68, table_row=1)
+        No  |  단계  |  수행자  |  시스템  |  관련 요구사항  |  관련 인터페이스
+    [table_row] Location(index=68, table_row=2)
+        No: 1  |  단계: 배송완료 7일 경과 자동 구매확정  |  수행자: 시스템  |  시스템: 배치 서버  |  관련 요구사항: FR-018  |  관련 인터페이스: IF-025
+    [table_row] Location(index=68, table_row=3)
+        No: 2  |  단계: 직접 구매확정  |  수행자: 회원  |  시스템: 웹(SCR-009)  |  관련 요구사항: FR-018  |  관련 인터페이스: IF-030
+    [table_row] Location(index=68, table_row=4)
+        No: 3  |  단계: 리뷰 작성·리뷰 포인트 적립  |  수행자: 회원  |  시스템: 웹(SCR-009)  |  관련 요구사항: FR-021  |  관련 인터페이스: IF-015
+    [table_row] Location(index=68, table_row=5)
+        No: 4  |  단계: ERP 매출 전표 전송  |  수행자: 시스템  |  시스템: VSM → EAI → ERP  |  관련 요구사항: FR-028  |  관련 인터페이스: IF-035
+
+[paragraph] Location(index=69)
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    업무 규칙
+
+[table 71]
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    [table_header] Location(index=70, table_row=1)
+        규칙 ID  |  내용
+    [table_row] Location(index=70, table_row=2)
+        규칙 ID: BR-18  |  내용: 구매확정 시 결제금액의 1% 적립
+    [table_row] Location(index=70, table_row=3)
+        규칙 ID: BR-19  |  내용: 리뷰는 구매확정 후 30일 이내, 텍스트 100P / 포토 300P
+    [table_row] Location(index=70, table_row=4)
+        규칙 ID: BR-20  |  내용: 포인트는 적립일로부터 1년이 지나면 월말 배치로 소멸
+
+[paragraph] Location(index=71)
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    예외 흐름
+
+[table 73]
+    제목 경로: [3. 프로세스 상세 > P-07 구매확정·적립·매출 전송]
+    [table_header] Location(index=72, table_row=1)
+        예외 ID  |  상황  |  처리
+    [table_row] Location(index=72, table_row=2)
+        예외 ID: EX-13  |  상황: 전표 전송 3일 연속 실패  |  처리: 관리자 알림
