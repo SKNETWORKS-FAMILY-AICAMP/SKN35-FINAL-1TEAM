@@ -19,16 +19,28 @@ PROJECT_CREATOR_LEVELS = {UserLevel.MANAGER, UserLevel.ADMIN}
 
 
 # 로그인 사용자의 회사에 프로젝트를 만들고 생성자를 project_owner(OWNER)로 기록
+# 생성자는 팀 없는 OWNER 멤버로도 함께 등록 (업로드·승인·알림이 project_member 기준이라)
 async def create_project(db: AsyncSession, current_user: User, name: str) -> Project:
     if current_user.user_type not in PROJECT_CREATOR_LEVELS:
         raise ForbiddenError("프로젝트 생성 권한이 없습니다.")
 
-    if current_user.company_id is None:
-        raise AppError("소속 회사가 없는 사용자입니다.")
-
-    return await project_repo.create_project(
+    project = await project_repo.create_project(
         db, current_user.company_id, name, current_user.user_id
     )
+
+    await project_repo.create_project_members(
+        db,
+        [
+            ProjectMember(
+                project_id=project.project_id,
+                project_team_id=None,
+                user_id=current_user.user_id,
+                role=ProjectMemberRole.OWNER,
+            )
+        ],
+    )
+
+    return project
 
 
 # 같은 회사 직원 여러 명을 프로젝트 팀에 추가 (전부 성공 또는 전부 실패)
@@ -87,11 +99,7 @@ async def add_project_members(
             project_id=project_id,
             project_team_id=member.project_team_id,
             user_id=member.user_id,
-            role=(
-                ProjectMemberRole.OWNER
-                if member.user_id == project.project_owner
-                else member.role
-            ),
+            role=member.role,
             is_approval=member.is_approval,
         )
         for member in body.members
@@ -224,38 +232,55 @@ async def create_project_team(
     if leader is None or leader.company_id != current_user.company_id:
         raise NotFoundError("사용자를 찾을 수 없습니다.")
 
-    if await project_repo.get_project_member(db, project_id, leader.user_id):
+    leader_member = await project_repo.get_project_member(
+        db, project_id, leader.user_id
+    )
+    is_owner_leader = leader.user_id == project.project_owner
+
+    if is_owner_leader:
+        if leader_member is None:
+            raise NotFoundError("프로젝트 OWNER 멤버 정보를 찾을 수 없습니다.")
+
+        if leader_member.project_team_id is not None:
+            raise ConflictError("이미 이 프로젝트의 다른 팀에 속한 사용자입니다.")
+
+        if body.is_approval == YN.Y:
+            raise AppError("OWNER는 승인권자로 지정할 수 없습니다.")
+
+    elif leader_member is not None:
         raise ConflictError("이미 이 프로젝트의 다른 팀에 속한 사용자입니다.")
 
     team = await project_repo.create_project_team(
-        db, project_id, body.name, leader.user_id
+        db, project_id, body.name, leader.user_id, body.description
     )
 
-    try:
-        await project_repo.create_project_members(
-            db,
-            [
-                ProjectMember(
-                    project_id=project_id,
-                    project_team_id=team.project_team_id,
-                    user_id=leader.user_id,
-                    # OWNER가 본인을 팀장으로 지정하면 역할은 OWNER로 저장
-                    role=(
-                        ProjectMemberRole.OWNER
-                        if leader.user_id == project.project_owner
-                        else ProjectMemberRole.LEADER
-                    ),
-                    is_approval=body.is_approval,
-                )
-            ],
-        )
-    except IntegrityError:
-        raise ConflictError("이미 이 프로젝트의 다른 팀에 속한 사용자입니다.") from None
+    if is_owner_leader:
+        leader_member.project_team_id = team.project_team_id
+        await db.flush()
+    else:
+        try:
+            await project_repo.create_project_members(
+                db,
+                [
+                    ProjectMember(
+                        project_id=project_id,
+                        project_team_id=team.project_team_id,
+                        user_id=leader.user_id,
+                        role=ProjectMemberRole.LEADER,
+                        is_approval=body.is_approval,
+                    )
+                ],
+            )
+        except IntegrityError:
+            raise ConflictError(
+                "이미 이 프로젝트의 다른 팀에 속한 사용자입니다."
+            ) from None
 
     return ProjectTeamResponse(
         project_team_id=team.project_team_id,
         project_id=project_id,
         name=team.name,
+        description=team.description,
         team_leader=leader.user_id,
         team_leader_name=leader.name,
         member_count=1,
@@ -311,6 +336,7 @@ def _to_team_response(
         project_team_id=team.project_team_id,
         project_id=team.project_id,
         name=team.name,
+        description=team.description,
         team_leader=team.team_leader,
         team_leader_name=leader_name,
         member_count=member_count,

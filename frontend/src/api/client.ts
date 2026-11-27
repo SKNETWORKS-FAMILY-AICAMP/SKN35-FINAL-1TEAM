@@ -18,6 +18,11 @@ export class ApiError extends Error {
   }
 }
 
+// 백엔드가 4xx 로 준 안내 문구는 그대로 보여주고, 검증 오류(422)·서버 오류는 기본 문구로 바꾼다
+export function errorMessage(err: unknown, fallback: string) {
+  return err instanceof ApiError && err.status < 500 && err.status !== 422 ? err.message : fallback
+}
+
 // FastAPI 에러 응답 { detail } 에서 메시지만 꺼낸다
 async function toApiError(res: Response) {
   const body = await res.text()

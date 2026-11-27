@@ -37,6 +37,7 @@ class ProjectTeamCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     team_leader: int = Field(gt=0)
     is_approval: YN = YN.N
+    description: str | None = Field(default=None, max_length=100)
 
     @field_validator("name")
     @classmethod
@@ -48,6 +49,14 @@ class ProjectTeamCreateRequest(BaseModel):
 
         return v
 
+    @field_validator("description")
+    @classmethod
+    def strip_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+
+        return v.strip() or None
+
 
 # 대표 팀장 변경 api request
 class ProjectTeamLeaderUpdateRequest(BaseModel):
@@ -58,8 +67,9 @@ class ProjectTeamLeaderUpdateRequest(BaseModel):
 class ProjectTeamResponse(BaseModel):
     project_team_id: int
     project_id: int
-    name: str | None
-    team_leader: int | None
+    name: str
+    description: str | None
+    team_leader: int
     team_leader_name: str | None
     member_count: int
 
@@ -150,10 +160,10 @@ class ProjectDetailResponse(BaseModel):
     my_project_team_id: int | None
 
 
-# 프로젝트 멤버 목록의 멤버 1명 응답
+# 프로젝트 멤버 목록의 멤버 1명 응답 (팀 배정 전 OWNER는 project_team_id가 None)
 class ProjectMemberDetail(BaseModel):
     project_member_id: int
-    project_team_id: int
+    project_team_id: int | None
     user_id: int
     name: str
     email: str

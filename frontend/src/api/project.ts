@@ -11,6 +11,12 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   END: '종료',
 }
 
+export const PROJECT_ROLE_LABEL: Record<ProjectMemberRole, string> = {
+  OWNER: '오너',
+  LEADER: '팀장',
+  MEMBER: '팀원',
+}
+
 export const formatDate = (iso: string) => iso.slice(0, 10).replaceAll('-', '.')
 
 // backend/app/projects/schemas.py
@@ -44,6 +50,20 @@ export interface ProjectMember {
   name: string
   email: string
   role: ProjectMemberRole
+  is_approval: YN
+}
+
+export interface ProjectTeamCreateRequest {
+  name: string
+  team_leader: number
+  is_approval: YN
+}
+
+// OWNER 는 부여할 수 없고, 승인권자(is_approval=Y)는 LEADER 만 가능
+export interface ProjectMemberCreateItem {
+  user_id: number
+  project_team_id: number
+  role: Exclude<ProjectMemberRole, 'OWNER'>
   is_approval: YN
 }
 
@@ -90,6 +110,12 @@ export const projectQueries = {
       staleTime: PROJECT_STALE_TIME,
       select: (data) => data.teams,
     }),
+  members: (projectId: number) =>
+    queryOptions({
+      queryKey: ['projects', projectId, 'members'],
+      queryFn: () => request<{ members: ProjectMember[] }>(`/projects/${projectId}/members`),
+      select: (data) => data.members,
+    }),
   metrics: (projectId: number) =>
     queryOptions({
       queryKey: ['projects', projectId, 'metrics'],
@@ -100,4 +126,36 @@ export const projectQueries = {
       queryKey: ['projects', projectId, 'approvals', 'pending'],
       queryFn: () => request<PendingApproval[]>(`/projects/${projectId}/approvals?status=pending`),
     }),
+}
+
+// 프로젝트 생성: MANAGER·ADMIN 만 가능, 만든 사람이 OWNER
+export function createProject(name: string) {
+  return request<Omit<Project, 'my_role'>>('/projects', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+
+// 팀 생성: OWNER 만 가능, 대표 팀장을 그 팀의 LEADER 로 함께 등록
+export function createProjectTeam(projectId: number, body: ProjectTeamCreateRequest) {
+  return request<ProjectTeam>(`/projects/${projectId}/teams`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// 멤버 일괄 추가: OWNER 는 모든 팀, LEADER 는 자기 팀에 MEMBER 만
+export function addProjectMembers(projectId: number, members: ProjectMemberCreateItem[]) {
+  return request<{ members: unknown[] }>(`/projects/${projectId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ members }),
+  })
+}
+
+// 대표 팀장 변경: OWNER 만 가능, 그 팀의 LEADER 중에서만
+export function updateTeamLeader(projectId: number, projectTeamId: number, teamLeader: number) {
+  return request<ProjectTeam>(`/projects/${projectId}/teams/${projectTeamId}/leader`, {
+    method: 'PATCH',
+    body: JSON.stringify({ team_leader: teamLeader }),
+  })
 }

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.enums import YN
@@ -24,18 +24,22 @@ class Company(Base):
 
 class Department(Base):
     __tablename__ = "department"
+    __table_args__ = (UniqueConstraint("company_id", "name"),)
 
     dept_id: Mapped[int] = mapped_column(primary_key=True)
-    company_id: Mapped[int | None] = mapped_column(ForeignKey("company.company_id"))
-    name: Mapped[str | None] = mapped_column(String(50))
-    description: Mapped[str | None] = mapped_column(String(255))
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.company_id"))
+    name: Mapped[str] = mapped_column(String(50))
+    description: Mapped[str | None] = mapped_column(Text)
+    is_deleted: Mapped[YN] = mapped_column(
+        Enum(YN, name="yn"), default=YN.N, server_default=YN.N.value
+    )
 
 
 class User(Base):
     __tablename__ = "user"
 
     user_id: Mapped[int] = mapped_column(primary_key=True)
-    company_id: Mapped[int | None] = mapped_column(ForeignKey("company.company_id"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("company.company_id"))
     dept_id: Mapped[int | None] = mapped_column(ForeignKey("department.dept_id"))
     name: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(255), unique=True)
