@@ -10,7 +10,6 @@ import {
 } from '../api/project'
 import { useCurrentUser } from '../hooks/useAuth'
 
-// 대시보드 상단에 노출하는 지표와 클릭 시 이동할 화면
 const METRIC_LINKS: Partial<Record<ProjectMetric['key'], string>> = {
   headDocuments: '/documents',
   pendingApprovals: '/documents',

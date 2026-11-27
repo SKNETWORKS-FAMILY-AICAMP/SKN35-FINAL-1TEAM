@@ -8,9 +8,7 @@ import {
   analysisSteps,
   assistantFallback,
   assistantKnowledge,
-  company,
   confirmedChanges,
-  departments,
   documentReview,
   documents,
   impactCandidates,
@@ -144,7 +142,6 @@ export const implementedHandlers = [
   http.post(`${API}/auth/refresh`, unauthorized),
   http.post(`${API}/auth/logout`, noContent),
 
-  http.get(`${API}/companies`, () => HttpResponse.json(company)),
   http.get(`${API}/companies/users`, ({ request }) => {
     if (!getUserId(request)) return unauthorized()
     const users = accounts.map((a) => ({
@@ -156,7 +153,6 @@ export const implementedHandlers = [
     }))
     return HttpResponse.json({ users })
   }),
-  http.get(`${API}/companies/departments`, () => HttpResponse.json({ departments })),
 
   http.get(`${API}/projects`, ({ request }) => {
     const userId = getUserId(request)
@@ -198,11 +194,6 @@ export const implementedHandlers = [
         }
       })
     return HttpResponse.json({ teams })
-  }),
-  http.get<{ projectId: string }>(`${API}/projects/:projectId/members`, ({ params, request }) => {
-    const projectId = Number(params.projectId)
-    if (!findProjectForUser(projectId, getUserId(request))) return forbidden()
-    return HttpResponse.json({ members: membersOf(projectId) })
   }),
 
   http.post(`${API}/documents/upload-document`, async ({ request }) => {
@@ -261,7 +252,6 @@ export const pendingHandlers = [
     async ({ request }) => {
       const member = getMockMember(request)
       const { team, response } = await request.json()
-      // 자기 팀 응답만 남길 수 있다
       if (member && member.team !== team) return forbidden()
       documentReview.teams = documentReview.teams.map((t) =>
         t.name === team ? { ...t, state: 'done', by: member?.name ?? '', response } : t,
@@ -296,7 +286,6 @@ export const pendingHandlers = [
   http.post<never, CreateSubmissionBody>(`${API}/submissions`, async ({ request }) => {
     const member = getMockMember(request)
     const { fileName, mode, documentId } = await request.json()
-    // 새 버전은 자기 팀 문서에만
     const doc = documents.find((d) => d.id === documentId)
     if (mode === 'existing' && (!doc || (member && doc.team !== member.team))) return forbidden()
     const id = `sub-${Date.now()}`

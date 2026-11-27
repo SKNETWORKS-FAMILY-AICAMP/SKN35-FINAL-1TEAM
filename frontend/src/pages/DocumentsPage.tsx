@@ -36,7 +36,6 @@ function DocumentsPage() {
 
   const { data: documents = [] } = useQuery(documentQueries.list())
 
-  // 팀 필터는 프로젝트 팀 목록 API 기준
   const teamFilters = [ALL_TEAMS, ...teams.flatMap((t) => (t.name ? [t.name] : []))]
 
   const filtered = useMemo(() => {

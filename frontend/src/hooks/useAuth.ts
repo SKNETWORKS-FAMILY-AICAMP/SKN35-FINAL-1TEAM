@@ -77,7 +77,6 @@ export function useSelectProject() {
 
   return (projectId: number) => {
     localStorage.setItem(PROJECT_KEY, String(projectId))
-    // 프로젝트별 데이터를 새로 받는다
     queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
   }
 }

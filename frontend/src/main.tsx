@@ -11,7 +11,6 @@ const queryClient = new QueryClient({
   },
 })
 
-// 개발 환경에서는 VITE_API_MOCKING(all | partial | off)에 따라 MSW 목업을 켠다
 async function enableMocking() {
   if (!import.meta.env.DEV || import.meta.env.VITE_API_MOCKING === 'off') return
   const { worker } = await import('./mocks/browser')

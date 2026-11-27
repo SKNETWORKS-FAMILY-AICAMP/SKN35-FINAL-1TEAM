@@ -11,7 +11,6 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   END: '종료',
 }
 
-// '2026-09-01T00:00:00' → '2026.09.01'
 export const formatDate = (iso: string) => iso.slice(0, 10).replaceAll('-', '.')
 
 // backend/app/projects/schemas.py

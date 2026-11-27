@@ -1,7 +1,7 @@
 import type { AssistantAnswer } from '../api/assistant'
 import type { DocumentReview, DocumentSummary, ParagraphDiff } from '../api/documents'
 import type { ConfirmedChange, ReceivedNotification, SentChange } from '../api/notifications'
-import type { CompanyUser, Department } from '../api/organizations'
+import type { CompanyUser } from '../api/organizations'
 import type {
   PendingApproval,
   Project,
@@ -12,14 +12,6 @@ import type {
 import type { AnalysisStep, ImpactCandidate } from '../api/submissions'
 
 // 백엔드 구현 API(회사·프로젝트·팀)와 같은 모양의 목업. 테스트 계정 비밀번호는 목업 전용
-export const company = { company_id: 1, name: '헤디', email_domain: 'hedy.co.kr' }
-
-export const departments: Department[] = [
-  { dept_id: 1, name: '기획팀', description: '서비스 기획' },
-  { dept_id: 2, name: '개발팀', description: '서비스 개발' },
-  { dept_id: 3, name: 'PMO', description: '프로젝트 관리' },
-]
-
 export const accounts: (CompanyUser & { password: string })[] = [
   {
     user_id: 1,
@@ -72,7 +64,6 @@ export const projectTeams: ProjectTeam[] = SHOP_TEAMS.map((name, i) => ({
   member_count: 0,
 }))
 
-// 쇼핑몰 구축에만 소속. 김민준은 PMO 팀장이자 승인권자
 export const projectMembers: (Omit<ProjectMember, 'name' | 'email'> & { project_id: number })[] = [
   {
     project_member_id: 1,
